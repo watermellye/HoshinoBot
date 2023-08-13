@@ -1,0 +1,56 @@
+.am-badge {
+	-webkit-box-sizing: border-box;
+    display: inline-block;
+    /* min-width: 10px; */
+   padding: 0.6em 0.1rem 1rem 0rem;
+    height: 40px;
+    width: 40px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    vertical-align: middle;
+    white-space: nowrap;
+    background-color: #cccccc;
+    margin-right: 10px;
+    text-align: center;
+     border-radius: 1000px;
+		}
+.am-tabs-nav1 li {
+     -webkit-box-flex: 1; 
+    -webkit-flex: 1;
+    -ms-flex: 1;
+     flex: 1; 
+}
+.am-badge1 {
+    display: inline-block;
+    /* min-width: 10px; */
+   padding: 0.6em 0.1rem 1rem 0rem;
+    height: 40px;
+    width: 40px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    vertical-align: middle;
+    white-space: nowrap;
+    background-color: #cccccc;
+    margin-right: 10px;
+    text-align: center;
+		}
+		
+	.am-tabs-nav1 li {
+     -webkit-box-flex: 1; 
+    -webkit-flex: 1;
+    -ms-flex: 1;
+     flex: 1; 
+}
+.bottitle{
+	margin-left: -10px;
+	font-size: 14px;
+	margin-top: 21px;
+	color: #c0c0c0;
+}
+.bottitle.active{
+	color: #E98B11;
+}

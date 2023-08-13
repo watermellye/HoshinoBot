@@ -1,0 +1,11 @@
+.member_main {
+    background-color: #fff;
+    padding: 10px 20px 20px 20px;
+    width: 88%;
+    position: relative;
+    float:left;
+    min-height: 625px;
+    border: 1px solid #e8e8e8;
+    border-radius: 15px;
+    margin-left:30px;
+}

@@ -1,3 +1,8 @@
+# AutoPCR
+AutoPCR的说明详见repo目录中`hoshino/modules/README.md`
+
+以下为HoshinoBot的README。
+
 # HoshinoBot
 [![License](https://img.shields.io/github/license/Ice9Coffee/HoshinoBot)](LICENSE)
 ![Python Version](https://img.shields.io/badge/python-3.8+-blue)

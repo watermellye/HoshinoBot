@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html class="no-js" lang="">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="x-ua-compatible" content="ie=edge" />
+        {% block title %}
+        <title></title>
+        {% endblock %}
+        <meta name="description" content="" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <link rel="shortcut icon" type="image/x-icon" href="{{url_for('autopcr.static',filename='img/icon/favicon.png')}}" />
+
+        <!-- CSS here -->
+        {% block css %}
+        <link href="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/bootstrap/4.6.0/css/bootstrap.min.css" type="text/css" rel="stylesheet" />
+        <link href="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/animate.css/4.1.1/animate.min.css" type="text/css" rel="stylesheet" />
+        <link href="https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/magnific-popup.js/1.1.0/magnific-popup.css" type="text/css" rel="stylesheet" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/fontawesome-all.min.css')}}" />
+        <link href="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/jqueryui/1.11.4/jquery-ui.css" type="text/css" rel="stylesheet" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/flaticon.css')}}" />
+        <link href="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/aos/3.0.0-beta.6/aos.css" type="text/css" rel="stylesheet" />
+        <link href="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/slick-carousel/1.9.0/slick.css" type="text/css" rel="stylesheet" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/default.css')}}" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/style.css')}}" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/responsive.css')}}" />
+        <link rel="stylesheet" href="{{url_for('autopcr.static', filename='css/Switch.css')}}" />
+
+        {% endblock %}
+    </head>
+
+    <body>
+        <!-- header-area -->
+        {% block header %}
+        <header></header>
+        {% endblock %}
+        <!-- header-area-end -->
+
+        <!-- main-area -->
+        {% block main %}
+        <main></main>
+        {% endblock %}
+        <!-- main-area-end -->
+
+        <!-- footer-area -->
+        {% block footer %}
+        <footer></footer>
+        {% endblock %}
+        <!-- footer-area-end -->
+
+        <!-- JS here -->
+        {% block js %}
+        <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
+        <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/bootstrap/4.6.0/js/bootstrap.min.js" type="application/javascript"></script>
+        <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery.isotope/3.0.5/isotope.pkgd.min.js" type="application/javascript"></script>
+        <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery.imagesloaded/4.1.4/imagesloaded.pkgd.min.js" type="application/javascript"></script>
+        <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/magnific-popup.js/1.1.0/jquery.magnific-popup.min.js" type="application/javascript"></script>
+        <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery.countdown/2.2.0/jquery.countdown.min.js" type="application/javascript"></script>
+        <script src="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/jqueryui/1.11.4/jquery-ui.min.js" type="application/javascript"></script>
+        <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/slick-carousel/1.9.0/slick.min.js" type="application/javascript"></script>
+        <script src="{{url_for('autopcr.static', filename='js/ajax-form.js')}}"></script>
+        <script src="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/wow/1.1.2/wow.min.js" type="application/javascript"></script>
+        <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/aos/3.0.0-beta.6/aos.js" type="application/javascript"></script>
+        <script src="{{url_for('autopcr.static', filename='js/plugins.js')}}"></script>
+        <script src="{{url_for('autopcr.static', filename='js/main.js')}}"></script>
+        <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/bootbox.js/5.5.2/bootbox.min.js" type="application/javascript"></script>
+        <!--<script src="  {{url_for('autopcr.static', filename='js/dropdown.js')}}"></script>-->
+        <script type="text/javascript">
+            tt = "10px";
+            $(function () {
+                $(window).scroll(function () {
+                    tt = $(window).scrollTop() + 10 + "px";
+                });
+            });
+            var prompt = function (message, style, time) {
+                style = style === undefined ? "alert-success" : style;
+                time = time === undefined ? 3000 : time;
+                $('<div id="promptModal">')
+                    .appendTo("body")
+                    .addClass("alert " + style)
+                    .css({
+                        display: "block",
+                        "z-index": 99999,
+                        width: "75%",
+                        left: ($(document.body).outerWidth(true) - 120) / 8,
+                        top: tt,
+                        position: "absolute",
+                        padding: "20px",
+                        "border-radius": "5px",
+                    })
+                    .html(message)
+                    .hide()
+                    .fadeIn(200, function () {
+                        $("#promptModal").show();
+                    })
+                    .delay(time)
+                    .fadeOut(200, function () {
+                        $("#promptModal").remove();
+                    });
+            };
+            // 成功提示
+            var success_prompt = function (message, time) {
+                prompt(message, "alert-success", time);
+            };
+
+            // 失败提示
+            var fail_prompt = function (message, time) {
+                prompt(message, "alert-danger", time);
+            };
+
+            // 提醒
+            var warning_prompt = function (message, time) {
+                prompt(message, "alert-warning", time);
+            };
+
+            // 信息提示
+            var info_prompt = function (message, time) {
+                prompt(message, "alert-info", time);
+            };
+
+            // 信息提示
+            var alert_prompt = function (message, time) {
+                prompt(message, "alert-primary", time);
+            };
+
+            function suspend(str, message = "") {
+                // document.scrollingElement.scrollTop = 0; //让页面滚动到最顶部
+                switch (str) {
+                    case "alert-success":
+                        success_prompt(message != "" ? message : "提交成功");
+                        break;
+                    case "alert-warning":
+                        warning_prompt(message != "" ? message : "错误警告");
+                        break;
+                    case "alert-danger":
+                        fail_prompt(message != "" ? message : "提交失败");
+                        break;
+                    case "alert-info":
+                        info_prompt(message != "" ? message : "未查询到数据");
+                        break;
+                    case "alert-info2":
+                        info_prompt(message != "" ? message : "未查询到数据");
+                        break;
+                    default:
+                        alert_prompt("未查询到数据");
+                }
+            }
+        </script>
+        {% endblock %}
+    </body>
+</html>

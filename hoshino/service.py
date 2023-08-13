@@ -182,21 +182,25 @@ class Service:
                 gl[g].append(sid)
         return gl
 
-
     def on_message(self, event='group') -> Callable:
         def deco(func) -> Callable:
             @wraps(func)
             async def wrapper(ctx):
                 if self._check_all(ctx):
                     try:
-                        return await func(self.bot, ctx)
+                        try:
+                            return await func(self.bot, ctx)
+                        except TypeError as e:
+                            return await func(ctx)
+                    except CanceledException as e:
+                        pass
                     except Exception as e:
                         self.logger.error(f'{type(e)} occured when {func.__name__} handling message {ctx["message_id"]}.')
                         self.logger.exception(e)
-                    return
+                        return
             return self.bot.on_message(event)(wrapper)
         return deco
-
+                    
 
     def on_prefix(self, *prefix, only_to_me=False) -> Callable:
         if len(prefix) == 1 and not isinstance(prefix[0], str):
@@ -282,7 +286,6 @@ class Service:
             return func
         return deco
 
-
     def on_command(self, name, *, only_to_me=False, deny_tip=None, **kwargs) -> Callable:
         kwargs['only_to_me'] = only_to_me
 
@@ -315,7 +318,6 @@ class Service:
             return nonebot.on_command(name, **kwargs)(wrapper)
         return deco
 
-
     def on_natural_language(self, keywords=None, **kwargs) -> Callable:
         def deco(func) -> Callable:
             @wraps(func)
@@ -336,7 +338,6 @@ class Service:
                         self.logger.exception(e)
             return nonebot.on_natural_language(keywords, **kwargs)(wrapper)
         return deco
-
 
     def scheduled_job(self, *args, **kwargs) -> Callable:
         kwargs.setdefault('timezone', pytz.timezone('Asia/Shanghai'))
@@ -374,7 +375,6 @@ class Service:
             except Exception as e:
                 self.logger.error(f"群{gid} 投递{TAG}失败：{type(e)}")
                 self.logger.exception(e)
-
 
     def on_request(self, *events):
         def deco(func):

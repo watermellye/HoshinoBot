@@ -1,0 +1,11 @@
+__pycache__
+/daily_result/*
+/secret.json
+/secret_backup.json
+/allow_cron.json
+/axis.json
+/event_gacha_info.json
+/main_story_id.json
+/new_event_list.json
+/tower_story_id.json
+!.gitkeep

@@ -36,12 +36,6 @@ MODULES_ON = {
     'botmanage',
     'dice',
     'groupmaster',
-    # 'hourcall',
-    # 'kancolle',
-    # 'mikan',
-    'pcrclanbattle',
     'priconne',
-    # 'setu',
-    # 'translate',
-    # 'twitter',
+    'farm'
 }

@@ -1,0 +1,161 @@
+{% extends "base.html" %} {% block title %}
+<title>清日常配置修改</title>
+
+{% endblock %} {% block css %} {{ super() }} {% endblock %} {% block header %} {{ super() }} {% endblock %} {% block main %}
+<main>
+    <div class="cart-area pt-5 pb-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12">
+                    <div class="cart-wrapper">
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <tbody>
+                                    <tr>
+                                        <td class="product-thumbnail">
+                                            <a><img src="https://q1.qlogo.cn/g?b=qq&amp;nk={{qqid}}&amp;s=160" alt="<QQ头像>"></a>
+                                        </td>
+                                        <td class="product-delete">
+                                            <button class="btn" id="do_daily">触发清日常</button>
+                                            <button class="btn" onclick="OpenDailyResult()">清日常结果</button>
+                                        </td>
+                                        <td class="product-name" id="order_item_data3">
+                                            <h4><a>{{qqname}}</a></h4>
+                                            <h4><a>{{qqid}}</a></h4>
+                                        </td>
+                                        <td class="product-name">
+                                            <h4><a>{{pcrname}}</a></h4>
+                                            <h4><a>{{pcrid}}</a></h4>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <br>
+                <div class="col-12">
+                    <table id="tab" width="100%" border="0" cellspacing="0" cellpadding="0" class="table">
+                        <div>
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>brief</th>
+                                    <th>__value__</th>
+                                    <th>description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ta"></tbody>
+                        </div>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %} {% block footer %} {{ super() }} {% endblock %} {% block js %} {{ super() }}
+
+<script type="text/javascript" charset="utf-8">
+    $(document).ready(function () {
+        ret = {{config|safe}};
+        cnt = 0;
+        let ta_tab = $("#ta");
+        for (name in ret) {
+            cnt += 1;
+            item = ret[name];
+            ta_tab.append(`<tr id="tr${cnt}"></tr>`); //添加一列
+            let tab = $(`#tr${cnt}`); //把这一列的内容添加上
+            if (item["implemented"]) {
+                tab.append(`<td id='cn${cnt}'>${item["cn"]}</td>`);
+            }
+            else {
+                tab.append(`<td id='cn${cnt}' style="color: lightpink;">(未实装)${item["cn"]}</td>`);
+            }
+            now_config = item["value"];
+            typ = item["type"];
+            if (typ == "bool") tab.append(`<td>${get_bool_text(cnt, now_config, name, item.name)}</td>`);
+            else tab.append(`<td id='enum${cnt}'>${get_enum_text(cnt, now_config, item["candidate_value"])}</td>`);
+            if (item["implemented"]) {
+                tab.append(`<td id='description${cnt}'>${item["description"]}</td>`);
+            }
+            else {
+                tab.append(`<td id='description${cnt}' style="color: lightpink;">(未实装)${item["description"]}</td>`);
+            }
+            tab.append(`<td hidden id='name${cnt}'>${name}</td>`);
+        }
+
+    });
+
+    function OpenDailyResult() {
+        window.open(window.location.href.replace("config", "result"));
+    }
+    function selectOnChange(select) {
+        update_new();
+    }
+
+    function checkboxOnclick(checkbox) {
+        if (checkbox.checked) {
+            $(`[name=${checkbox.name}]`).each(function() {
+                $(this)[0].checked = false;
+            });
+            $(`#${checkbox.id}`)[0].checked = true;
+        }
+        update_new();
+    }
+
+    function get_enum_text(id, value, branchs) {
+        let res = `<select  class="custom-select" id=enum${id} onchange="selectOnChange(this)">`;
+        for (let i = 0; i < branchs.length; i++) res += `<option value='select${i}' ${value == branchs[i] ? "selected" : ""}>${branchs[i]}</option>`;
+        res += "</select>";
+        return res;
+    }
+    function get_bool_text(cnt, value, name, clas) {
+        return `<input type="checkbox" class="switch" ${value ? 'checked="checked"' : ""} id='bool${cnt}_${name}' name=${clas ? clas : cnt} onclick="checkboxOnclick(this)" />`;
+    }
+
+    function update_new() {
+        let config = {"qqid": "{{qqid|safe}}", "url_key": window.location.search.substring(9)};
+        id = 1;
+        while ($(`#name${id}`).length) {
+            config[$(`#name${id}`).text()] = ($(`#enum${id} option:selected`).length ? $(`#enum${id} option:selected`).text() : $(`[id^=bool${id}]`)[0].checked);
+            id += 1;
+        }
+        $.ajax({
+            url: "/autopcr/api/config",
+            type: "put",
+            data: JSON.stringify(config),
+            contentType: "application/json;charset=utf-8",
+            processData: false,
+            success: function (ret) {
+                if (ret.statusCode == 200) {
+                    suspend("alert-success", ret.message);
+                } else {
+                    alert(`本次修改保存失败，点击确定将刷新页面。\n${ret.statusCode}: ${ret.message}`);
+                    location.reload(true);
+                }
+            },
+        });
+    }
+
+    $("#do_daily").click(function() {
+        var button = $(this);
+        button.attr("disabled", true);
+        button.css("pointer-events", "none");
+        button.css("opacity", 0.5);
+
+        setTimeout(function() {
+            button.attr("disabled", false);
+            button.css("pointer-events", "auto");
+            button.css("opacity", 1);
+        }, 3000); // 无论api是否响应，3s后恢复按钮
+        
+        $.post("/autopcr/api/trigger_daily", {"qqid": "{{qqid|safe}}", "url_key": window.location.search.substring(9)}, function (ret) {
+            if (parseInt((`${ret.statusCode}`)[0]) == 2) {
+                suspend("alert-success", ret.message);
+            }
+            else {
+                suspend("alert-danger", `${ret.statusCode}: ${ret.message}`);
+            }
+        });
+    });
+</script>
+{% endblock %}

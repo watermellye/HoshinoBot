@@ -1,0 +1,4 @@
+__pycache__
+/static/daily_result_pic/*
+/secret.key
+!.gitkeep

@@ -1,0 +1,67 @@
+body
+{
+	background-color: #fff;
+	font-family: "微软雅黑";
+}
+
+.content{
+	background-color: #62b2f4;
+	margin: 0px auto;
+	width: 100%;
+	border: 1px solid #ddd;
+	background-image: url(../img/banner.png);
+	background-repeat: no-repeat;
+	/*background-size: contain;*/
+	background-position: center;
+	background-position-y: 10px;
+	
+}
+.am-tabs-nav{
+	font-weight: bold;
+}
+.am-form-field{
+background-color:#fff	
+}
+.loginDiv
+{
+	background-color: #fff;
+	margin-top: 67px;
+	margin-bottom: 75px;
+	width:373px;
+	height: 458px;
+	margin-right: 50px;
+	float: right;
+	margin-left: ;
+}
+.logo
+{
+	/*width: 1000px;*/
+	margin-left: 10px;
+	float: left;
+  }
+.left1{
+	position: absolute;
+	background-image: url(../img/User.png);
+	background-color: #C0C0C0;
+	height: 40px;
+	width: 40px;
+	background-repeat: no-repeat;
+	display: block;
+	float: left;
+	margin-top:48px;
+	left:30px;
+	background-position: center;
+}
+.left2{
+	position: absolute;
+	background-image: url(../img/Lock.png);
+	background-color: #C0C0C0;
+	height: 40px;
+	width: 40px;
+	background-repeat: no-repeat;
+	display: block;
+	float: left;
+	margin-top:0px;
+	left:30px;
+	background-position: center;
+}

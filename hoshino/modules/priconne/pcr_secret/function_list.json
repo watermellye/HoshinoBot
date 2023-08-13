@@ -1,0 +1,706 @@
+{
+    "allow_ata_trigger": {
+        "brief": "",
+        "cn": "允许他人代触发清日常",
+        "description": "允许他人在群里@你的号以清你的日常。若禁止，可通过在群里发送“允许/禁止本群清日常”以将此群加入/移除白名单。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "clan_battle_allow_cron": {
+        "brief": "",
+        "cn": "允许会战期间触发定时清日常",
+        "description": "允许在公会战期间触发定时清日常。（包括购买经验瓶/强化石）",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "event_ticket_allow_trigger": {
+        "brief": "",
+        "cn": "活动结束前自动清票",
+        "description": "允许在活动最后一天由ebq自动清扫荡券和交换讨伐证。复刻活动不会触发。会战期间不会触发。若需不登录以攒体力或十连，请关闭此功能。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "cron_no_response_1": {
+        "brief": "",
+        "cn": "定时清日常_1",
+        "description": "在指定的时间触发清日常。-1代表不开启该功能。由于QQ风控严重，不会返回清日常结果。",
+        "type": "enum",
+        "candidate_value": [
+            -1,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+        ],
+        "implemented": true,
+        "default": -1
+    },
+    "cron_no_response_2": {
+        "brief": "",
+        "cn": "定时清日常_2",
+        "description": "也可以向bot发送指令“定时清日常<数字>”或“定时清日常<数字> <数字>”来控制。注意：即使bot挂了，定时清日常也会生效",
+        "type": "enum",
+        "candidate_value": [
+            -1,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+        ],
+        "implemented": true,
+        "default": -1
+    },
+    "buy_stamina_passive": {
+        "brief": "被动买体力",
+        "cn": "被动买体力",
+        "description": "以下流程中使用体力时，若体力不足，最多允许购买的体力管数。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            2,
+            3,
+            6,
+            9,
+            12
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "horse_race": {
+        "brief": "登录赛跑",
+        "cn": "登录赛跑",
+        "description": "触发兰德索尔杯特别登录奖励",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "clan_like": {
+        "brief": "公会点赞",
+        "cn": "公会点赞",
+        "description": "在公会中自动随机选择一位成员点赞。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "room_accept_all": {
+        "brief": "领取家具产出",
+        "cn": "领取家具产出",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "explore": {
+        "brief": "探索",
+        "cn": "扫荡EXP和MANA探索",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "explore_cloister": {
+        "brief": "回廊探索",
+        "cn": "扫荡露娜塔回廊",
+        "description": "仅露娜塔开放期间生效。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "free_gacha": {
+        "brief": "普通扭蛋",
+        "cn": "抽取普通扭蛋十连",
+        "description": "抽取每日免费普通扭蛋（道具或记忆碎片十连）。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "free_gacha_special_event": {
+        "brief": "免费十连",
+        "cn": "抽取活动免费十连",
+        "description": "抽取免费十连。在没有免费十连的时期会自动关闭。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "buy_exp&stone_mode": {
+        "brief": "通常商店",
+        "cn": "通常商店购买方式",
+        "description": "通常商店中经验瓶和强化石的购买方式。follow=跟随清日常, all=买满一天四次",
+        "type": "enum",
+        "candidate_value": [
+            "follow",
+            "all"
+        ],
+        "implemented": true,
+        "default": "follow"
+    },
+    "buy_exp_count": {
+        "brief": "",
+        "cn": "经验瓶购买次数",
+        "description": "通常商店中经验瓶的购买次数。根据MANA持有量设置了阶梯阈值。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4,
+            7
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_stone_count": {
+        "brief": "",
+        "cn": "强化石购买次数",
+        "description": "通常商店中强化石的购买次数。根据MANA持有量设置了阶梯阈值。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4,
+            7
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_mana": {
+        "brief": "钻石买MANA",
+        "cn": "钻石买MANA次数",
+        "description": "钻石购买MANA次数。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            10,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_dungeon_shop": {
+        "brief": "地下城商店",
+        "cn": "地下城商店购买次数",
+        "description": "自动购买拥有数量<300的装备碎片（不含整装、不含角色碎片）。地下城币<10w时不生效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4,
+            7,
+            10,
+            13
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_jjc_shop": {
+        "brief": "竞技场商店",
+        "cn": "竞技场商店购买次数",
+        "description": "自动购买拥有数量<100的装备碎片（不含整装、不含角色碎片）。竞技场币<5w时不生效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_pjjc_shop": {
+        "brief": "公主竞技场商店",
+        "cn": "公主竞技场每天购买次数",
+        "description": "自动购买拥有数量<100的装备碎片（不含整装、不含角色碎片）。公主竞技场币<5w时不生效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "dungeon_sweep": {
+        "brief": "地下城扫荡",
+        "cn": "扫荡地下城",
+        "description": "'passed'表示扫荡当前您已通关的最高等级的地下城；'max'表示仅尝试扫荡当前最高等级地下城(ex4)，若您尚未通关则不扫荡。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "passed",
+            "max"
+        ],
+        "implemented": true,
+        "default": "max"
+    },
+    "jjc_reward": {
+        "brief": "收取双场币",
+        "cn": "收取双场币",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "6x_sweep": {
+        "brief": "刷6x碎片",
+        "cn": "纯净碎片刷取次数",
+        "description": "当某角色已开放6x，当前5x，且 碎片数<50 时，刷取该vh碎片。钻石<1w 时重置不生效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            3,
+            6
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "event_hard_135": {
+        "brief": "刷活动H1-1/3/5",
+        "cn": "刷活动H1-1/3/5",
+        "description": "选项分别代表：不刷取、仅刷复刻、仅刷新图、全部刷取。（下同）",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "old",
+            "new",
+            "all"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "event_hard_24": {
+        "brief": "刷活动H1-2/4",
+        "cn": "刷活动H1-2/4",
+        "description": "注意：仅存在新活动/仅存在复刻活动时，old==new==all。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "old",
+            "new",
+            "all"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "xinsui_4": {
+        "brief": "刷心碎4",
+        "cn": "心碎4刷取次数",
+        "description": "若选择大于5，将自动重置。（下同）",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "xinsui_3": {
+        "brief": "刷心碎3",
+        "cn": "心碎3刷取次数",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "xinsui_2": {
+        "brief": "刷心碎2",
+        "cn": "心碎2刷取次数",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "xinsui_1": {
+        "brief": "刷心碎1",
+        "cn": "心碎1刷取次数",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "xingqiubei_2": {
+        "brief": "刷星球杯2",
+        "cn": "星球杯2刷取次数",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "xingqiubei_1": {
+        "brief": "刷星球杯1",
+        "cn": "星球杯1刷取次数",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            5,
+            10,
+            15,
+            20
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_stamina_active": {
+        "brief": "主动买体力",
+        "cn": "主动购买体力",
+        "description": "当流程执行到此时，将今日总购买体力管数补齐至此设定值，供接下来的刷图清空体力使用。钻石数量<1w强制不触发。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            2,
+            3,
+            6,
+            9,
+            12,
+            14
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "allin_normal_temp": {
+        "brief": "预置权重刷图",
+        "cn": "AllIn当期N图",
+        "description": "将所有剩余体力以4:12:18:36:36:27投入N49-8/10/11/12/13/14。此为临时功能，每月不定更新。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "name": "allin",
+        "default": false
+    },
+    "event_normal_5": {
+        "brief": "刷活动N1-5",
+        "cn": "AllIn活动N1-5",
+        "description": "将所有剩余体力投入活动N1-5图中。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "old",
+            "new"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "event_normal_15": {
+        "brief": "刷活动N1-15",
+        "cn": "AllIn活动N1-15",
+        "description": "将所有剩余体力投入活动N1-15图中。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "old",
+            "new"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "auto_sweep_normal": {
+        "brief": "智能刷n图",
+        "cn": "AllIn智能选择的N图",
+        "description": "将所有剩余体力投入普通N图中。选取的图为发送“#刷图推荐”后返回的图中的第一张。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "name": "allin",
+        "default": false
+    },
+    "event_hard_boss_sweep": {
+        "brief": "扫荡活动HardBoss",
+        "cn": "扫荡活动HardBoss",
+        "description": "max表示清空扫荡券，max-1用于留一次用来讨伐VHBoss。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            "max-2",
+            "max-1",
+            "max"
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "event_mission_accept": {
+        "brief": "领取活动任务",
+        "cn": "领取活动任务奖励",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "event_gacha": {
+        "brief": "交换讨伐证",
+        "cn": "交换所有讨伐证",
+        "description": "仅当当前列表为普通列表（不存在重置目标报酬）时生效。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "flash_shop": {
+        "brief": "限时商店",
+        "cn": "购买限时商店",
+        "description": "自动购买拥有数量<300的装备碎片（不含整装）。若上面开启了经验瓶购买，则限时商店中的经验瓶也会购买。MANA数量过少时不触发。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "present_receive": {
+        "brief": "领取礼物箱",
+        "cn": "领取礼物箱",
+        "description": "dated表示仅领取有期限礼物。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "dated",
+            "all"
+        ],
+        "implemented": true,
+        "default": "dated"
+    },
+    "mission_accept_all": {
+        "brief": "领取任务奖励",
+        "cn": "领取任务奖励",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "season_accept_all": {
+        "brief": "领取女神庆典",
+        "cn": "领取女神庆典任务奖励",
+        "description": "注意：不会领取女神宝库的奖励。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "clan_equip_donation": {
+        "brief": "发起捐赠请求",
+        "cn": "自动发起捐赠",
+        "description": "若距上次捐赠大于8小时，自动发起捐赠。仅推荐在农场中时启用。disabled=不发起；unlimited=对拥有数量最少的可捐赠碎片发起请求；silver=过滤蓝/铜等级装备碎片，只发起银装及以上等级的碎片捐赠请求；以此类推。为了稳定，建议两次清日常间隔设置为9小时及以上。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "unlimited",
+            "silver",
+            "gold",
+            "purple"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "clan_chara_support": {
+        "brief": "挂满支援",
+        "cn": "挂满支援",
+        "description": "自动挂满支援。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "room_furniture_upgrade": {
+        "brief": "升级家具",
+        "cn": "尝试升级家具",
+        "description": "在家具全部升至最高等级时自动关闭。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "read_main_story": {
+        "brief": "阅读主线剧情",
+        "cn": "观看主线剧情",
+        "description": "若开启该功能，将在触发一次后自动关闭（下同）。剧情列表更新相较游戏可能有滞后（下同）。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "read_tower_story": {
+        "brief": "阅读露娜塔剧情",
+        "cn": "观看露娜塔剧情",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "read_event_story": {
+        "brief": "阅读活动剧情",
+        "cn": "观看活动剧情",
+        "description": "包括所有未读的当期和往期活动剧情。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
+    "read_trust_chapter": {
+        "brief": "阅读活动羁绊剧情",
+        "cn": "观看信赖度章节",
+        "description": "包括所有未读的当期活动（含当期复刻活动）的信赖度章节。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    }
+}

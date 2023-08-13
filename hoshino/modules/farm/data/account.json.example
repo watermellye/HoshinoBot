@@ -1,0 +1,37 @@
+// 请在同目录下新建一个名为account.json的文件
+[
+    { // 默认情况（你需要将农场号的账密按这个格式依次填入account.json）
+        "account": "abcabc",
+        "password": "xyzxyz"
+    },
+    {
+        "account": "qwerty",
+        "password": "asdfgh"
+    },
+    { // 在账号同步入数据库并成功登录后，json文件也会被同步更新，其看起来应类似这样
+        "pcr_name": "aaa",
+        "account": "abcabc",
+        "password": "xyzxyz",
+        "activate": true,
+        "pcrid": 111,
+        "clanid": 222,
+        "force_update": false
+      // 如果登录失败，你会看到"activate"字段的值为false，并出现错误描述字段。
+      // 登录失败的原因可能是账密错误，也可能是偶发的过码失败，也可能是服务器错误。
+    },
+    { 
+      // 若修改了账密，或因偶发失败需重新尝试登录，
+      // 你应该将"activate"和"force_update"字段均置为true，随后重启hoshino，观察控制台。
+        "account": "abcxyz",
+        "password": "xyzabc",
+        "activate": true,
+        "force_update": true
+      // 若此时已有"pcr_name"等字段，可以删掉也可以不删。
+    }
+    { // 如需让某个农场号不再进行工作，则应该将"force_update"字段置为true，"activate"字段置为false
+        "account": "abcabc",
+        "password": "xyzxyz",
+        "activate": false,
+        "force_update": true
+    }
+]

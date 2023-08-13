@@ -9,11 +9,17 @@ db.json
 database.json
 *.db
 *.sqlite
-res/
-img/
-imgs/
-image/
-images/
+
+/res/*
+!/res/img/
+/res/img/*
+!/res/img/priconne/
+/res/img/priconne/*
+!/res/img/priconne/gadget/
+!/res/img/priconne/gadget/**
+!/res/img/priconne/unit/
+/res/img/priconne/unit/*
+!/res/img/priconne/unit/icon_unit_100031.png
 
 # 非公开的组件
 hoshino/modules/pcrclanbattle/clanbattlev3

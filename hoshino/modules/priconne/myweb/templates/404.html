@@ -1,0 +1,33 @@
+{% extends "base.html" %} {% block title %}
+<title>清日常配置修改</title>
+{% endblock %} {% block css %} {{ super() }} {% endblock %} {% block header %} {{ super() }} {% endblock %} {% block main %}
+<!-- main-area -->
+<main>
+    <!-- 404-area -->
+    <section class="error-area pt-100 pb-100">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-6 col-md-10">
+                    <div class="error-content text-center">
+                        <div class="error_txt" id="error_code">404</div>
+                        <p id="error_text">The page you are looking for was moved, removed, renamed or might never existed.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- 404-area-end -->
+</main>
+<!-- main-area-end -->
+
+{% endblock %} {% block footer %} {{ super() }} {% endblock %} {% block js %} {{ super() }}
+<script>
+    $(document).ready(function () {
+        error_code = "{{error_code|safe}}";
+        error_text = `{{message|safe}}`.replaceAll('\n', '<br>')
+
+        if (error_text != "") $("#error_text")[0].innerHTML=error_text;
+        if (error_code != "") $("#error_code")[0].innerHTML=error_code;
+    });
+</script>
+{% endblock %}
