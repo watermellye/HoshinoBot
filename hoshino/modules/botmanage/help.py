@@ -8,10 +8,10 @@ TOP_MANUAL = '''
 PCR装备农场：请发送[农场帮助]
 PCR自定清日常：请发送[pcr账号帮助]
 
-※本bot基于HoshinoBot
-https://github.com/watermellye/HoshinoBot/tree/lei
+※本bot源码：
+github.com/watermellye/HoshinoBot/
 
-※Hoshino开源Project：
+※本bot基于HoshinoBot。Hoshino开源Project：
 github.com/Ice9Coffee/HoshinoBot
 您对项目作者的支持与Star是本bot更新维护的动力
 💰+⭐=❤

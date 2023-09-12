@@ -253,7 +253,7 @@ class PcrClient:
             raise e
             
 
-    async def LoginAndCheck(self, isFirstTry=True) -> bool:
+    async def LoginAndCheck(self, isFirstTry=True, forceTry=False) -> bool:
         """
         检查当前账号对象的状态。若有需要，自动调用登录模块。
         没有抛出异常就是检验通过。
@@ -268,10 +268,19 @@ class PcrClient:
         Returns:
             bool: True=向数据库插入了新纪录，False=为数据库已有的记录
         """
-        if self.needLoginAndCheck == False:
-            return
         
-        if self._needBiliLogin:
+        if forceTry == False:
+            pcrAccountInfoRecord: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == self.biliSdkClient.account)
+            if pcrAccountInfoRecord is not None:
+                if pcrAccountInfoRecord.is_valid == False:
+                    raise AssertionError(f'账号[{self.biliSdkClient.account}]被标记为不合法，终止登录。请重新交号。')
+            
+            if self.needLoginAndCheck == False:
+                return
+            
+            if self._needBiliLogin:
+                await self.BiliLogin()
+        else:
             await self.BiliLogin()
 
         if 'REQUEST-ID' in self._headers:
@@ -310,7 +319,11 @@ class PcrClient:
             return True
         else:
             if pcrAccountInfoRecord.uid_cache != self._uid or pcrAccountInfoRecord.access_key_cache != self._access_key:
+                pcrAccountInfoRecord.account = self.biliSdkClient.account
+                pcrAccountInfoRecord.password = self.biliSdkClient.password
                 pcrAccountInfoRecord.uid_cache = self._uid
                 pcrAccountInfoRecord.access_key_cache = self._access_key
+                pcrAccountInfoRecord.update_time = str(datetime.now())
+                pcrAccountInfoRecord.is_valid = True
                 pcrAccountInfoRecord.save()
             return False

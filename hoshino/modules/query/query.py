@@ -62,11 +62,11 @@ async def VerifyAccount(accountInfo:dict) -> PcrClient:
     client = PcrClientManager.FromDict(accountInfo)
     client._needBiliLogin = True
     client.needLoginAndCheck = True
-    await LoginAndCheck(client)
+    await LoginAndCheck(client, True)
     return client
     
 
-async def LoginAndCheck(client: PcrClient):
+async def LoginAndCheck(client: PcrClient, forceTry: bool = False):
     """
     检查当前账号对象的状态。若有需要，自动调用登录模块。
     没有抛出异常就是检验通过。
@@ -81,7 +81,7 @@ async def LoginAndCheck(client: PcrClient):
     Returns:
         bool: True=向数据库插入了新纪录，False=为数据库已有的记录
     """
-    is_new = await client.LoginAndCheck()
+    is_new = await client.LoginAndCheck(forceTry=forceTry)
     if is_new:
         try:
             pcrName = await get_username({"account":client.biliSdkClient.account, "password":client.biliSdkClient.password}) # pcrName = await client.GetUsername()

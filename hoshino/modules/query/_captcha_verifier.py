@@ -114,7 +114,7 @@ async def EllyeManualCaptchaVerifier(challenge:str, gt:str, userId:str, qqid:int
     """
     
     url = f"https://captcha.ellye.cn/?captcha_type=1&challenge={challenge}&gt={gt}&userid={userId}&gs=1"
-    assert qqid, "未传入qqid"
+    assert qqid, "过码模块异常"
     try:
         await g_bot.send_private_msg(user_id=qqid, message=f'pcr账号登录触发验证码，请在{gs_waitTime}秒内完成以下链接中的验证内容。')
         await g_bot.send_private_msg(user_id=qqid, message=url)
@@ -157,7 +157,7 @@ async def LuluManualCaptchaVerifier(challenge:str, gt:str, userId:str, qqid:int)
     """
     
     url = f"https://help.tencentbot.top/geetest_/?captcha_type=1&challenge={challenge}&gt={gt}&userid={userId}&gs=1"
-    assert qqid, "未传入qqid"
+    assert qqid, "过码模块异常"
     try:
         await g_bot.send_private_msg(user_id=qqid, message=f'pcr账号登录触发验证码，请在{gs_waitTime}秒内完成以下链接中的验证内容，随后将第1个方框的内容点击复制，并加上"{gs_commandPrefix} "前缀发送给机器人完成验证\n示例：{gs_commandPrefix} 123456789')
         await g_bot.send_private_msg(user_id=qqid, message=url)

@@ -1,6 +1,6 @@
 from ._pcr_client import PcrClient
 from ..autopcr_db.typing import *
-from typing import Dict
+from typing import List, Tuple, Union, Dict
 
 _g_pcrClients: Dict[str, PcrClient] = {}
 
@@ -25,12 +25,21 @@ class PcrClientManager:
         assert len(account), "账号名为空"
         assert len(password), "密码为空"
         
+        pcrAccountInfoRecord: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == account)
+        if pcrAccountInfoRecord is not None:
+            if pcrAccountInfoRecord.password != password:
+                pcrAccountInfoRecord.password = password
+                pcrAccountInfoRecord.is_valid = True
+                pcrAccountInfoRecord.uid_cache = ""
+                pcrAccountInfoRecord.access_key_cache = ""
+                pcrAccountInfoRecord.save()
+            
         if account in _g_pcrClients:
             if _g_pcrClients[account].biliSdkClient.password == password:
-                return _g_pcrClients[account]
+                return _g_pcrClients[account]                
         
         client = PcrClient(account, password, qqid=qqid)
-        pcrAccountInfoRecord: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == account)
+        
         if pcrAccountInfoRecord is not None:
             if pcrAccountInfoRecord.uid_cache and pcrAccountInfoRecord.access_key_cache:
                 client._needBiliLogin = False
@@ -81,7 +90,7 @@ class PcrClientManager:
             PcrClient: PcrClient对象
         """
         
-        assert accountInfo.is_valid, f'记录[{accountInfo.pcrid}]被标记为不合法'
+        assert accountInfo.is_valid, f'记录[{accountInfo.pcrid}]被标记为不合法，请重新交号'
         return PcrClientManager.FromStr(accountInfo.account, accountInfo.password)
 
 
@@ -106,3 +115,14 @@ class PcrClientManager:
         pcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.pcrid == pcrid)
         assert pcrAccountInfo is not None, "记录不存在"
         return PcrClientManager.FromRecord(pcrAccountInfo)
+    
+    
+    @staticmethod
+    def Get(accountInfo: Union[dict, int, PcrAccountInfo]) -> PcrClient:
+        if isinstance(accountInfo, dict):
+            return PcrClientManager.FromDict(accountInfo)
+        if isinstance(accountInfo, int):
+            return PcrClientManager.FromPcrid(accountInfo)
+        if isinstance(accountInfo, PcrAccountInfo):
+            return PcrClientManager.FromRecord(accountInfo)
+        raise TypeError(f'[PcrClientManager.Get]参数[accountInfo]类型[{type(accountInfo)}]不合法')

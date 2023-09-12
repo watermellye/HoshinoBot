@@ -16,6 +16,7 @@ from .util.output import *
 from ..autopcr_db.typing import *
 from ..autopcr_db.autopcr_database_table import AutopcrDatabaseTable
 from ..query import query
+from ..query.PcrApi import PcrApi, PcrApiException
 
 sv_help = '''
 免费BCR装备农场！
@@ -43,6 +44,7 @@ gs_accountPath = gs_currentDir / "data" / "account.json"
 @nonebot.on_startup
 async def SyncJson2DbOnStartup():
     asyncio.create_task(SyncJson2Db())
+    asyncio.create_task(ForTest())
 
 
 @sv.on_fullmatch(("农场帮助", "帮助农场"))
@@ -54,7 +56,7 @@ async def Help(bot: HoshinoBot, ev: CQEvent):
 
 
 async def SyncJson2Db():
-    assert Path.exists(gs_accountPath), "Error. 无农场号配置文件，不执行同步。"
+    assert Path.exists(gs_accountPath), "Skip. 无农场号配置文件，不执行同步。"
     try:
         with gs_accountPath.open("r", encoding="utf-8") as fp:
             accounts: List[dict] = json.load(fp)
@@ -90,15 +92,13 @@ async def SyncJson2Db():
             else:
                 accountDict["activate"] = True
                 needInit = True
-                if pcrid is not None:
+                if pcrid is not None and forceUpdate == False:
                     pcrAccount: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.pcrid == pcrid)
                     if pcrAccount is not None:
                         if account == pcrAccount.account and password == pcrAccount.password:
                             needInit = False
-                            if forceUpdate:
-                                await AutopcrDatabaseTable.UpdateFarmInfoModel(pcrid)
 
-                if needInit:
+                if needInit or forceUpdate:
                     hoshino.logger.info(f'农场号{accountDict}正在同步')
                     pcrid = await AutopcrDatabaseTable.UpdatePcrAccountInfoModel(accountDict)
                     accountDict["pcrid"] = pcrid
@@ -122,11 +122,6 @@ async def SyncJson2Db():
 class NotFoundException(Exception):
     pass
 
-
-class PcrApiException(Exception):
-    pass
-
-
 def GetFarmRecords() -> ClanInfo:
     """
     获取所有会长为农场号的公会的记录
@@ -138,10 +133,10 @@ def GetFarmRecords() -> ClanInfo:
 
 def GetFarmIds() -> List[int]:
     """
-    获取所有会长为农场号的公会的ID
+    获取所有农场公会的ID
     """
-    return [clanRecord.clanid for clanRecord in ClanInfo.select().join(FarmInfo, on=(ClanInfo.leader_pcrid_cache == FarmInfo.pcrid))] # TEMP
-    return [clanRecord.clanid for clanRecord in GetFarmRecords()]
+    activated_distinct_records = FarmInfo.select(FarmInfo.clanid_cache).where(FarmInfo.activated == True).distinct()
+    return list({record.clanid_cache for record in activated_distinct_records if record.clanid_cache != 0})
 
     
 def GetANotFullClan() -> ClanInfo:
@@ -873,9 +868,6 @@ async def FindDonationRequest() -> None:
 #         return Outputs.FromStr(OutputFlag.Abort, f'[{pcrid}]非农场号且非农场人员')
 
 
-# # TODO 退出公会功能（不一定是农场）
-
-
 # @sv.on_prefix(("农场号"))
 # async def QueryStaffOfflineInterface(bot: HoshinoBot, ev: CQEvent):
 #     if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
@@ -889,3 +881,75 @@ async def FindDonationRequest() -> None:
 
 
 # TODO 测试用户拒绝邀请后的表现
+
+async def CreateClan(pcrid: int, clan_name: str, description: str = "") -> Outputs:
+    """
+    使用pcrid账号创建一个公会。
+    
+    Args:
+        clan_name (str): 公会名
+        description (str, optional): 公会描述
+    """
+    try:
+        res = await PcrApi(pcrid).CreateClan(PcrApi.CreateClanRequest(clan_name, description))
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'[{pcrid}]创建公会[{clan_name}]失败：{e}')
+    return Outputs.FromStr(OutputFlag.Succeed, f'[{pcrid}]创建公会[{clan_name}]({res.clan_id})成功')
+
+
+async def InviteToClan(leader_pcrid: int, invited_pcrid: int) -> Outputs:
+    """
+    尝试使用leader_pcrid账号对member_pcrid账号发起加入公会的邀请。
+    如果正常返回说明成功，任何失败将抛出异常。
+    """
+    
+    leaderPcrClient = PcrApi(leader_pcrid)
+    try:
+        invitedProfile = await leaderPcrClient.GetProfile(invited_pcrid)
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]查看账号[{invited_pcrid}]信息失败：{e}')
+    
+    if invitedProfile.get("clan_name", "") != "":
+        return Outputs.FromStr(OutputFlag.Abort, f'账号[{invited_pcrid}]已在公会[{invitedProfile["clan_name"]}]，无法邀请')
+    
+    try:
+        await leaderPcrClient.ClanInvite(PcrApi.ClanInviteRequest(invited_pcrid, "欢迎加入怡宝的装备农场！"))
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]邀请账号[{invited_pcrid}]加入公会失败：{e}')
+
+    return Outputs.FromStr(OutputFlag.Succeed, f'使用会长账号[{leader_pcrid}]邀请账号[{invited_pcrid}]加入公会成功')
+
+
+async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
+    pcrClient = PcrApi(pcrid)
+    try:
+        invitedClans = await pcrClient.GetInvitedClans()
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'查看账号[{pcrid}]被公会邀请信息失败：{e}')
+    
+    if invitedClans == []:
+        return Outputs.FromStr(OutputFlag.Skip, f'账号[{pcrid}]未被任何公会邀请')
+    
+    targetClan = [x.clan_id for x in invitedClans if x.leader_viewer_id == inviter_pcrid]
+    if targetClan == []:
+        return Outputs.FromStr(OutputFlag.Skip, f'账号[{pcrid}]未被会长账号[{inviter_pcrid}]邀请')
+    targetClanId = targetClan[0]
+    try:
+        await pcrClient.AcceptClanInvite(targetClanId)
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'账号[{pcrid}]收到公会[{targetClanId}]邀请，但同意请求失败：{e}')
+    
+    return Outputs.FromStr(OutputFlag.Succeed, f'账号{pcrClient.OutputName}接受公会[{targetClanId}]邀请成功')
+
+# TODO 使用会长号踢除某个账号
+
+# TODO 自己退出一个公会
+
+async def ForTest():
+    ...
+    
+    # members = []
+    # leader = 0 
+    # for member in members:
+    #     print(await InviteToClan(leader, member))
+    #     print(await AcceptClanInvite(member, leader))

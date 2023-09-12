@@ -28,12 +28,12 @@ from .. import chara
 
 
 sv_help_all = '''
-[#pcr 账号 密码] 上传自己的账号和密码
-[更新密码<密码>]  更新自己的密码
+[#pcr 账号 密码] 上传或更新自己的账号和密码
 [清日常设置]
 [清日常]
 [#清日常@somebody]
 [#刷图推荐]
+[删除账号]
 
 [查box] bot会登录您的账号以获取您的详细box至数据库
 [查角色] 发这条指令试试就知道怎么用了
@@ -60,11 +60,11 @@ sv = Service('AutoPcr', visible=False)
 friendnum = []
 g_doDailyQueue: Set[str] = set()
 admin_qqid_int = 981082801
-uri = "bot.ellye.cn"
+uri = "https://bot.ellye.cn"
+if uri.endswith(r'/'):
+    uri = uri[:-1]
 
 group_manager = [
-    2083596366, 491673070, 535113884, 707332280, 77817627, 9953741, 1418528045,
-    1624230147, 2713660851, 3052322294, 823430445, 981082801
 ]
 
 @sv.on_fullmatch(("pcr账号帮助"))
@@ -367,7 +367,6 @@ async def 删除账号(bot, ev):
 @sv.on_prefix(("更新密码"))
 # 更新密码<qq号> <密码>
 async def 更新密码(bot, ev):
-    
     if ev.group_id:
         await bot.finish(ev, "请私聊使用本功能")
     msg = ev.message.extract_plain_text().strip().split(' ')
@@ -414,7 +413,6 @@ async def 上传账号(bot, ev):
     
 @sv.on_prefix(("#pcr"))
 async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
-    
     msg = ev.message.extract_plain_text().strip().split()
     dic = get_sec()
 
@@ -3405,7 +3403,7 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
         from ...botmanage.get_friend_info import is_friend
         if not await is_friend(ev.user_id, ev.self_id):
             await bot.finish(ev, "Please friend me first then resend the instruction after 1 minute. You shall receive the url key privately.")
-    await bot.send_private_msg(user_id=ev.user_id, message=f'https://{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+    await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
 
 
 def close_event_config(qqid):

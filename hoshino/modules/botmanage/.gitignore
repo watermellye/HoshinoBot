@@ -1,0 +1,7 @@
+/*
+!/.gitignore
+!/get_friend_info.py
+!/get_group_info.py
+!/data/
+/data/*
+!.gitkeep
