@@ -1,22 +1,32 @@
+#basic
 import asyncio
 import json
 from enum import IntEnum, unique
 from os.path import dirname, join, exists
 from traceback import print_exc
 from datetime import datetime
+from typing import List, Tuple, Union, Optional, Dict
+#3rd
 from pydantic import BaseModel, Field, validator
-from typing import List, Tuple, Union, Optional
-
+#relative
 from ..autopcr_db.typing import *
 from .pcr_client import PcrClientManager, PcrClient
 from ..priconne import chara
 from .utils import item_utils, map_utils
+from ..utils import output
 
 class PcrApiException(Exception):
     """
     所有和BCR服务器交互过程中产生的异常
     """
-    ...
+    def __str__(self):
+        original_message = super().__str__()
+        if original_message:
+            return original_message
+        if self.__cause__:
+            return str(self.__cause__)
+        print_exc()
+        return "" 
     
 class PcrApi:
     def __init__(self, accountInfo: Union[dict, int, PcrAccountInfo]):
@@ -40,7 +50,6 @@ class PcrApi:
         if self._pcrClient._viewerId != 0:
             return f'[{self._pcrClient._viewerId}]'
         return f'[{self._pcrClient.biliSdkClient.account}]'
-    
         
     def _UpdateRecord(self) -> None:
         self._record: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == self.Account)
@@ -75,8 +84,11 @@ class PcrApi:
         """
         await self.Login()
         try:
+            if isinstance(postData, str):
+                postData = json.loads(postData)
             res = await self._pcrClient.CallApi(url, postData, True)
         except Exception as e:
+            print_exc()
             raise PcrApiException from e
         return PcrApi.CallApiFullResponse(res[1], res[0])
     
@@ -85,12 +97,7 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        await self.Login()
-        try:
-            return await self._pcrClient.CallApi(url, postData)
-        except Exception as e:
-            raise PcrApiException from e
-
+        return (await self.CallApiFull(url, postData)).data
     
     @property
     def Pcrid(self) -> int:
@@ -122,18 +129,11 @@ class PcrApi:
 
     class CreateClanRequest(BaseModel):
         clan_name: str = Field(...)
-        description: str = Field(...)
-        join_condition: int = Field(...)
-        activity: int = Field(...)
-        clan_battle_mode: int = Field(...)
-
-        def __init__(self, clan_name: str, description: str = ""):
-            super().__init__(
-                clan_name=clan_name,
-                description=description, 
-                join_condition=3, 
-                activity=1,
-                clan_battle_mode=0)
+        description: str = Field(default="请多关照。")
+        join_condition: int = Field(default=3)
+        activity: int = Field(default=1)
+        clan_battle_mode: int = Field(default=0)
+        
 
     class CreateClanResponse(BaseModel):
         clan_id: int = Field(..., alias="clan_id")
@@ -141,7 +141,7 @@ class PcrApi:
 
         @validator('clan_id', pre=True, always=True)
         def convert_clan_id(cls, v):
-            return int(v)
+            return int(v) # pcr有时会返回str，将其转为int
 
     async def CreateClan(self, request: CreateClanRequest) -> CreateClanResponse:
         """
@@ -151,7 +151,7 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        res = PcrApi.CreateClanResponse(**(await self.CallApi("/clan/create", request.model_dump())))
+        res = PcrApi.CreateClanResponse(**(await self.CallApi("/clan/create", request.model_dump_json())))
         ClanInfo.create(clanid=res.clan_id, clan_name_cache=request.clan_name, clan_member_count_cache=1, leader_pcrid_cache=self.Pcrid)
         FarmInfo.update(clanid_cache=res.clan_id).where(FarmInfo.pcrid == self.Pcrid).execute()
         return res
@@ -179,7 +179,7 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        await self.CallApi("/clan/invite", request.model_dump())
+        await self.CallApi("/clan/invite", request.model_dump_json())
         # TODO 更新数据库
     
     
@@ -207,7 +207,7 @@ class PcrApi:
         if home_index.get("have_clan_invitation", 0) == 0:
             return []
         res = await self.CallApi("/clan/invited_clan_list", {"page": 0})
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # 将所有key转为str，避免**clan报错
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.InvitedClanResponse(**clan) for clan in res['list']]
         
     async def AcceptClanInvite(self, clan_id: int) -> None:
@@ -218,3 +218,164 @@ class PcrApi:
         _ = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 走个过场，模拟真实API触发顺序
         res = await self.CallApi("/clan/join", {"clan_id": clan_id, "from_invite": 1})
         FarmInfo.update(clanid_cache=clan_id).where(FarmInfo.pcrid == self.Pcrid).execute()
+    
+    class CharaLoveInfoResponse(BaseModel):
+        chara_id: int = Field(..., description="角色的4位ID")
+        chara_love: int = Field(..., description="当前经验值 升级所需：175, 245, 280, 700, 700, 700, 1400, 2100, 2800, 3500, 4200")
+        love_level: int = Field(..., description="当前等级 1-12")
+        
+    async def GetCharaLoveInfoList(self) -> List[CharaLoveInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = await self.GetLoadIndexRaw()
+        return [PcrApi.CharaLoveInfoResponse(**x) for x in res.get("user_chara_info", [])]
+    
+    async def GetCharaLoveInfoDict(self) -> Dict[int, CharaLoveInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        Return:
+            int: 角色4位ID
+        """
+        return {x.chara_id: x for x in await self.GetCharaLoveInfoList()}
+    
+    class ItemInfoRequest(BaseModel):
+        item_id: int = Field(...)
+        item_num: int = Field(..., description="需要使用的数量")
+        current_item_num: int = Field(..., description="当前拥有的数量")
+
+    class MultiGiveGiftRequest(BaseModel):
+        unit_id: int = Field(..., description="6位角色ID")
+        item_info: List['PcrApi.ItemInfoRequest'] = Field(...)
+
+    async def MultiGiveGift(self, request: MultiGiveGiftRequest) -> None:
+        await self.CallApi("/room/multi_give_gift", request.model_dump_json())
+
+    class UnitInfoResponse(BaseModel):
+        id: int = Field(..., description="角色6位ID")
+        unit_rarity: int = Field(..., description="实际星级")
+        battle_rarity: int = Field(..., description="当前设置的战斗星级。若同实际星级则为0")
+        unit_level: int = Field(..., description="当前等级")
+        promotion_level: int = Field(..., description="当前Rank")
+        exceed_stage: int
+        unit_exp: int
+        get_time: int
+        union_burst: List[Dict]
+        main_skill: List[Dict]
+        ex_skill: List[Dict]
+        free_skill: List[Dict]
+        equip_slot: List[Dict]
+        unique_equip_slot: List[Dict]
+        skin_data: Dict
+        favorite_flag: int
+
+    async def GetUnitInfoList(self) -> List[UnitInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = (await self.GetLoadIndexRaw()).get("unit_list", [])
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+        return [PcrApi.UnitInfoResponse(**x) for x in res]
+    
+    async def GetUnitInfo(self, chara_id: int) -> UnitInfoResponse:
+        """
+        Args:
+            chara_id: 角色6位ID
+        Raises:
+            PcrApiException
+            ValueError: 该账号未查询到此角色
+        """
+        character = next((x for x in await self.GetUnitInfoList() if x.id == chara_id), None)
+        if character is None:
+            raise ValueError(f"该账号未查询到角色{PcrApi.CharaOutputName(chara_id)}")
+        return character
+    
+    async def GetUnitInfoDict(self) -> Dict[int, UnitInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        Return:
+            int: 角色6位ID
+        """
+        return {x.id: x for x in await self.GetUnitInfoList()}
+    
+    class ItemInfoResponse(BaseModel):
+        type: int = Field(..., description="==2")
+        id: int = Field(..., description="5位")
+        stock: int
+        
+    async def GetItemInfoList(self) -> List[ItemInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = (await self.GetLoadIndexRaw()).get("item_list", [])
+        return [PcrApi.ItemInfoResponse(**x) for x in res]
+        
+    async def GetItemId2Stock(self) -> Dict[int, int]:
+        """
+        Raises:
+            PcrApiException
+        Returns:
+            int, int: 5位ID -> 数量
+        """
+        return {x.id: x.stock for x in await self.GetItemInfoList()}
+    
+    async def GetItemStock(self, item_id: int) -> int:
+        """
+        Args:
+            item_id: 5位ID
+        Raises:
+            PcrApiException
+        """
+        return (await self.GetItemId2Stock()).get(item_id, 0)
+
+    class UserEquipResponse(BaseModel):
+        type: int = Field(..., description="==4")
+        id: int = Field(..., description="6位")
+        stock: int
+        
+    async def GetUserEquipList(self) -> List[UserEquipResponse]:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = (await self.GetLoadIndexRaw()).get("user_equip", [])
+        return [PcrApi.UserEquipResponse(**x) for x in res]
+        
+    async def GetUserEquipId2Stock(self) -> Dict[int, int]:
+        """
+        Raises:
+            PcrApiException
+        Returns:
+            int, int: 6位ID -> 数量
+        """
+        return {x.id: x.stock for x in await self.GetUserEquipList()}
+    
+    async def GetUserEquipStock(self, user_equip_id: int) -> int:
+        """
+        Args:
+            user_equip_id: 6位ID
+        Raises:
+            PcrApiException
+        """
+        return (await self.GetUserEquipId2Stock()).get(user_equip_id, 0)
+    
+    async def ReadStory(self, story_id: int) -> None:
+        """
+        Args:
+            story_id (int): 7位ID。前四位为角色id，后三位为剧情id
+        """
+        await self.CallApi("/story/check", {"story_id": story_id}) # 每次读取剧情前都要先调用check
+        await self.CallApi("/story/start", {"story_id": story_id}) # 只有第一次读剧情获取奖赏才需要 # 其实有返回，告诉你获得多少钻石
+        
+
+    @staticmethod
+    def CharaOutputName(chara_id: int) -> str:
+        chara_id = int(chara_id)
+        if 100000 <= chara_id <= 999999:
+            chara_id //= 100
+        return f'[{chara.fromid(chara_id).name}]({chara_id})'

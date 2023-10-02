@@ -79,6 +79,7 @@ def name2id(name):
 
 
 def fromid(id_, star=0, equip=0):
+    # id 四位数字
     return Chara(id_, star, equip)
 
 
@@ -131,6 +132,7 @@ async def download_chara_icon(id_, star):
 class Chara:
 
     def __init__(self, id_, star=0, equip=0):
+        # id 四位数字
         self.id = id_
         self.star = star
         self.equip = equip

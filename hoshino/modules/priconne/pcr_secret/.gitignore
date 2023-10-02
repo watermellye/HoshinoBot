@@ -8,4 +8,5 @@ __pycache__
 /main_story_id.json
 /new_event_list.json
 /tower_story_id.json
+/data/*
 !.gitkeep

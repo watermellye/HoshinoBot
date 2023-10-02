@@ -1,11 +1,7 @@
 import asyncio
 import threading
 from typing import Dict, List, Optional, Tuple, Union, Set
-from nonebot import get_bot, on_command
-from nonebot import on_notice, NoticeSession
-from hoshino import R, Service, priv, util
-from hoshino.typing import CQEvent, HoshinoBot
-
+import math
 from os.path import dirname, join, exists
 from pathlib import Path
 from json import load, dump, dumps
@@ -16,15 +12,23 @@ import datetime
 import time
 from enum import IntEnum, unique
 from traceback import print_exc, format_exc
+from collections import defaultdict
 
+from nonebot import get_bot, on_command, on_startup
+from nonebot import on_notice, NoticeSession
 import pandas as pd
 import PIL as pil
 import dataframe_image as dfi
-import math
+
+from hoshino import R, Service, priv, util
+from hoshino.typing import CQEvent, HoshinoBot
 
 from ...query import query
+from ...query.PcrApi import PcrApi, PcrApiException
 from ...query.utils import item_utils, map_utils, star6_utils
 from .. import chara
+from .utils.file_io import gs_fileIo
+from ...utils.output import *
 
 
 sv_help_all = '''
@@ -67,6 +71,15 @@ if uri.endswith(r'/'):
 group_manager = [
 ]
 
+curpath = dirname(__file__)
+
+# dic = {}
+# dic[str(qq)] = {name, account, password, status}
+# 账号/密码缺失则为空
+sec = join(curpath, 'secret.json')
+IOLock = threading.Lock()
+   
+
 @sv.on_fullmatch(("pcr账号帮助"))
 async def send_help(bot: HoshinoBot, ev: CQEvent):
     sv_help = [sv_help_all]
@@ -101,20 +114,10 @@ async def added_friend(session: NoticeSession):
     friendnum = list(set(friendnum))
 
 
-curpath = dirname(__file__)
-
-# dic = {}
-# dic[str(qq)] = {name, account, password, status}
-# 账号/密码缺失则为空
-sec = join(curpath, 'secret.json')
-
-
 def save_sec_backup(dic):
     with open(join(curpath, 'secret_backup.json'), 'w', encoding="utf-8") as fp:
         dump(dic, fp, indent=4, ensure_ascii=False)
 
-
-IOLock = threading.Lock()
 
 def save_sec(dic):
     with IOLock:
@@ -322,7 +325,7 @@ async def 更新状态(bot, ev):
             else:
                 await bot.send_private_msg(
                     user_id=result[0],
-                    message="请直接在此聊天框交号。指令：\npcr 账号 密码 联系方式")
+                    message="请直接在此聊天框交号。指令：\npcr 账号 密码")
         elif msg in ['3', "未交号"]:
             dic[str(result[0])]["status"] = "3"
             await bot.send(ev, f"[CQ:at,qq={result[0]}]的账号状态已置为 未交号")
@@ -405,7 +408,7 @@ async def 更新密码(bot, ev):
 
 
 @sv.on_prefix(("pcr"))
-# pcr <pcr账号> <密码> <联系方式>
+# pcr <pcr账号> <密码>
 async def 上传账号(bot, ev):
     if ev.group_id:
         return
@@ -417,7 +420,7 @@ async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
     dic = get_sec()
 
     if len(msg) not in [2, 3]:
-        await bot.finish(ev, f"请输入\npcr 账号 密码 联系方式\n中间用空格分隔。")
+        await bot.finish(ev, f"请输入\npcr 账号 密码\n中间用空格分隔。")
     qqid = str(ev.user_id)
     st = "更新"
     if str(qqid) not in dic:
@@ -546,7 +549,7 @@ async def _account_verify(bot,
                 try:
                     await bot.send_private_msg(
                         user_id=int(qqid),
-                        message=f'您的pcr账号({dic[qqid]["name"]}) verification failed: {info["message"]}，账号状态已被置为错误。\n您提交的账号密码为：{dic[qqid]["account"]} / {dic[qqid]["password"]}\n请使用指令：\npcr 账号 密码 联系方式\n重新交号。'
+                        message=f'您的pcr账号({dic[qqid]["name"]}) verification failed: {info["message"]}，账号状态已被置为错误。\n您提交的账号密码为：{dic[qqid]["account"]} / {dic[qqid]["password"]}\n请使用指令：\npcr 账号 密码\n重新交号。'
                     )
                 except Exception as e:
                     if ret == 0:
@@ -626,7 +629,7 @@ async def 催交号(bot, ev):
             try:
                 await asyncio.sleep(10)
                 await bot.send_private_msg(
-                    user_id=int(qqid), message=f'请使用指令：\npcr 账号 密码 联系方式\n以交号。')
+                    user_id=int(qqid), message=f'请使用指令：\npcr 账号 密码\n以交号。')
             except:
                 outp.append(f'{qqid}({info["name"]}) 未交号 私聊发送失败')
             else:
@@ -2254,7 +2257,162 @@ async def update_story_id(account_info):
     if merged_tower_story_id != tower_story_id:
         with open(join(curpath, 'tower_story_id.json'), "w", encoding="utf-8") as fp:
             dump(merged_tower_story_id, fp, ensure_ascii=False)
+
+    try:
+        account_chara_story_list = [x for x in read_story_ids if x // 1000000 == 1]
+        cache_chara_story_list = gs_fileIo.CharaStoryList
+        if account_chara_story_list != cache_chara_story_list:
+            gs_fileIo.CharaStoryList = list(sorted(set(account_chara_story_list) | set(cache_chara_story_list)))
+    except:
+        return f'Fail. 获取角色剧情列表失败。请联系bot主人。'
+    
     return f'Succeed. 维护剧情列表成功'
+
+
+def stock2usage(stock: Dict[int, int], v: int) -> Dict[int, int]:
+    """
+    PCR同款的蛋糕或强化石使用策略。
+    优先从价值小的物品开始使用，并非DP。
+    
+    Args:
+        stock: 物品价值: 物品数量
+        v: 所需价值
+    Raises:
+        ValueError: v<=0
+        ValueError: 存在价值<=0或数量<0的物品
+        ValueError: 所有物品价值之和小于所需价值。
+    Returns:
+        Dict[int, int]: 物品价值: 使用数量。保证总价值不小于v。使用数量为0的物品不会出现在此dict中。
+    """
+    if v <= 0:
+        raise ValueError(f'所需价值应为正整数。传入了[{v}]')
+    if any(key <= 0 for key in stock):
+        raise ValueError(f'物品价值应为正整数')
+    if any(value < 0 for value in stock.values()):
+        raise ValueError(f'物品数量应为非负整数')
+    s = sum(sv * st for sv, st in stock.items())
+    if s < v:
+        raise ValueError(f'所有物品价值之和小于所需价值')
+    usage = {}
+    for sv, st in sorted(stock.items(), reverse=True):
+        if s - sv * st < v:
+            ut = math.ceil(st - (s - v) / sv)
+            usage[sv] = ut
+            v -= sv * ut
+        s -= sv * st
+    return dict(sorted(usage.items()))
+
+
+async def give_gift(pcrClient: PcrApi) -> Outputs:
+    try:
+        id42rarity = {id // 100: unit_info.unit_rarity for id, unit_info in (await pcrClient.GetUnitInfoDict()).items()}
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取各角色当前星级失败：{e}')
+    # 计算各角色满好感经验值
+    id42love_max_exp = {id: 700 if rarity <= 2 else 4200 if rarity <= 5 else 16800 for id, rarity in id42rarity.items()}
+    try:
+        id42love_now_exp = {id: love_info.chara_love for id, love_info in (await pcrClient.GetCharaLoveInfoDict()).items()}
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取各角色当前好感经验值失败：{e}')
+    # 计算各角色还需要的好感经验值
+    id42love_needed_exp = {id: max_exp - id42love_now_exp.get(id, 0) for id, max_exp in id42love_max_exp.items()}
+    id42love_needed_exp = {k: v for k, v in id42love_needed_exp.items() if v > 0}
+    if (id42love_needed_exp == {}):
+        return Outputs.FromStr(OutputFlag.Skip, "所有角色好感已满")
+    
+    try:
+        stock = {10: await pcrClient.GetItemStock(50001), 20: await pcrClient.GetItemStock(50002), 30: await pcrClient.GetItemStock(50003)}
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取蛋糕库存数量失败：{e.__cause__}')
+
+    outputs = Outputs()
+    succeeded: List[str] = []
+    skipped: List[str] = []
+    for id, needed_exp in sorted(id42love_needed_exp.items(), key=lambda item: item[1]):
+        #print(f"{PcrApi.CharaOutputName(id)}需要{needed_exp}好感经验值")
+        if stock[10] * 10 + stock[20] * 20 + stock[30] * 30 < needed_exp:
+            skipped.append(PcrApi.CharaOutputName(id))
+            continue
+        usage = stock2usage(stock, needed_exp)
+        #print(f'库存={stock} 用量={usage}')
+        request: List[PcrApi.ItemInfoRequest] = []
+        for v, t in usage.items():
+            request.append(PcrApi.ItemInfoRequest(item_id=50000 + v // 10, item_num=t, current_item_num=stock[v]))
+            stock[v] -= t
+        try:
+            await pcrClient.MultiGiveGift(PcrApi.MultiGiveGiftRequest(unit_id=id * 100 + 1, item_info=request))
+        except PcrApiException as e:
+            outputs.append(OutputFlag.Error, f"提升角色{PcrApi.CharaOutputName(id)}好感失败：{e.__cause__}")
+            break
+        else:
+            succeeded.append(PcrApi.CharaOutputName(id))
+    if succeeded:
+        outputs.append(OutputFlag.Succeed, f"以下角色提升好感成功：{' '.join(succeeded)}")
+    if skipped:
+        outputs.append(OutputFlag.Warn, f"由于蛋糕不足，以下角色好感未满：{' '.join(skipped)}")
+    return outputs            
+    
+async def read_chara_story(pcrClient: PcrApi) -> Outputs:
+    try:
+        load_index = await pcrClient.GetLoadIndexRaw()
+        read_story_ids = load_index["read_story_ids"]
+    except PcrApiException as e:
+        return f'Fail. 获取剧情阅读信息失败：{e}'
+    account_chara_story_list = [x for x in read_story_ids if x // 1000000 == 1]
+    
+    id42read = {}
+    for id7 in account_chara_story_list:
+        id42read[id7 // 1000] = max(id42read.get(id7 // 1000, 0), id7 % 1000)
+
+    outputs = Outputs()
+    succeeded: List[str] = []
+    try:
+        chara_loveinfo = await pcrClient.GetCharaLoveInfoDict()
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取各角色好感信息失败：{e}')
+    
+    cache_chara_story_list = gs_fileIo.CharaStoryList
+    for id4, love_info in chara_loveinfo.items():
+        already_read_id = id42read.get(id4, 0)
+        love_level = love_info.love_level
+        chara_name = PcrApi.CharaOutputName(id4)
+        
+        full_story = True
+        if '(' in chara.fromid(id4).name: # 非原皮角色剧情不满
+            full_story = False
+        if id4 not in [1061, 1068, 1070, 1071, 1092, 1093, 1094, 1097, 1098, 1099, 1701, 1702]: # 七冠，联动角色，环奈剧情不满
+            full_story = False
+        if (id4 * 1000 + 8) not in cache_chara_story_list: # 上面的列表可能更新不及时，添加此判断：该角色缓存中无8话剧情则视为不满
+            full_story = False
+            
+        if full_story:
+            max_read_id = love_level
+        else:
+            if love_level < 4:
+                max_read_id = 1
+            elif love_level == 4:
+                max_read_id = 2
+            elif love_level < 8:
+                max_read_id = 3
+            else:
+                max_read_id = love_level - 4
+        if max_read_id <= already_read_id:
+            continue
+        for read_id in range(already_read_id + 1, max_read_id + 1):
+            story_id = id4 * 1000 + read_id
+            try:
+                await pcrClient.ReadStory(story_id)
+            except Exception as e:
+                outputs.append(OutputFlag.Error, f'阅读角色{chara_name}剧情{story_id}失败。若此角色为活动角色，请先阅读活动剧情。')
+                break
+        if outputs:
+            succeeded.append(f'{chara_name}({already_read_id}→{max_read_id})')
+
+    if succeeded:
+        outputs.append(OutputFlag.Succeed, f"以下角色阅读好感剧情成功：{' '.join(succeeded)}")
+    if outputs.Result == OutputFlag.Empty:
+        return Outputs.FromStr(OutputFlag.Skip, "没有未读的角色好感剧情")
+    return outputs    
 
 
 async def read_main_story(account_info):
@@ -3450,6 +3608,7 @@ def DoDailyEnqueueWrapper(do_daily_func):
 async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     dic = get_sec()
     account_info = dic[qqid]
+    pcrClient = PcrApi(account_info)
     if nam is None:
         nam = account_info.get("pcrname", account_info.get("name", qqid))
     if bot is None:
@@ -3592,7 +3751,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11049008:4, 11049010:12, 11049011:18, 11049012:36, 11049013:36, 11049014:27})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11050013:1, 11050014:1})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -3665,6 +3824,16 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
             dic[qqid]["daily_config"]["room_furniture_upgrade"] = False
             save_sec(dic)
         progress.append(["room_furniture_upgrade", f'{ret}'])
+    if config["give_gift"]:
+        progress.append(["give_gift", f'{await give_gift(pcrClient)}'])
+        dic = get_sec()
+        dic[qqid]["daily_config"]["give_gift"] = False
+        save_sec(dic)
+    if config["read_chara_story"]:
+        progress.append(["read_chara_story", f'{await read_chara_story(pcrClient)}'])
+        dic = get_sec()
+        dic[qqid]["daily_config"]["read_chara_story"] = False
+        save_sec(dic)
     if config["read_main_story"]:
         progress.append(["read_main_story", f'{await read_main_story(account_info)}'])
         dic = get_sec()
@@ -3701,7 +3870,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
 
         def GetRM(msg: str) -> Tuple[str, str]:
             msg = msg.strip()
-            match_list = ['Fail.', 'Abort.', 'Warn.', 'Succeed.', 'Skip.']
+            match_list = ['Fail.', 'Abort.', 'Warn.', 'Succeed.', 'Skip.', 'Error:', 'Abort:', 'Warn:', 'Succeed:', 'Skip:']
             result = [item for item in match_list if item in msg]
             if len(result) == 0:
                 return "", msg
@@ -3730,7 +3899,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                     return 'background-color: #D0B777; color: White; font-weight: bold'  # 土黄
                 if 'Warn' in val:
                     return 'background-color: #B270A2; color: White; font-weight: bold'  # 浅紫
-                if 'Fail' in val:
+                if 'Fail' in val or 'Error' in val:
                     return 'background-color: #B45A3C; color: White; font-weight: bold'  # 砖红
 
             outp_pd_styled = outp_pd.style.applymap(draw_result, subset=['result'])
@@ -4411,10 +4580,10 @@ async def _change_support_unit(account, support_unit_id: int, mode: int):  # 1=�
     # 关卡：friend_support_units support_type=2 position=1/2 mode=3 
     # "action": 1=上 2=下
     # "unit_id": xxxx01
-
+    
     当前支援状态 = {
-        1: ret["clan_support_units"][2:],
-        2: ret["clan_support_units"][:2],
+        1: [x for x in ret["clan_support_units"] if x["position"] in [1, 2]],
+        2: [x for x in ret["clan_support_units"] if x["position"] in [3, 4]],
         3: ret["friend_support_units"]
     }
     目标支援组:list = 当前支援状态[mode]
@@ -4582,3 +4751,11 @@ async def axistest(*args):
     ]
     await get_proper_team(2, set(bbox))
 # 优衣 怜 优花梨 克莉丝提娜 咲恋(夏日) 可可萝(公主)
+
+@on_startup
+async def test_on_startup_interface():
+    asyncio.create_task(test_on_startup())
+    
+async def test_on_startup():
+    ...
+    #print(await read_chara_story(PcrApi(1104356549126)))

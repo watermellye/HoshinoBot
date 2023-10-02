@@ -12,7 +12,7 @@ import random
 import hoshino
 from hoshino.typing import CQEvent, HoshinoBot
 
-from .util.output import *
+from ..utils.output import *
 from ..autopcr_db.typing import *
 from ..autopcr_db.autopcr_database_table import AutopcrDatabaseTable
 from ..query import query
@@ -891,7 +891,7 @@ async def CreateClan(pcrid: int, clan_name: str, description: str = "") -> Outpu
         description (str, optional): 公会描述
     """
     try:
-        res = await PcrApi(pcrid).CreateClan(PcrApi.CreateClanRequest(clan_name, description))
+        res = await PcrApi(pcrid).CreateClan(PcrApi.CreateClanRequest(clan_name=clan_name, description=description))
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'[{pcrid}]创建公会[{clan_name}]失败：{e}')
     return Outputs.FromStr(OutputFlag.Succeed, f'[{pcrid}]创建公会[{clan_name}]({res.clan_id})成功')

@@ -13,13 +13,16 @@ class OutputFlag(Enum):
     Fatal = 8
     
 class Output:
-    def __init__(self, flag: OutputFlag, content: str):
+    def __init__(self, flag: OutputFlag = OutputFlag.Empty, content: str = ""):
         self.flag = flag
         self.content = content
     
-    def __str__(self):
-        return f'{self.flag.name}: {self.content}'
+    def ToString(self, showFlag: bool = True) -> str:
+        return f'{self.flag.name}: {self.content}' if showFlag else f'{self.content}'
     
+    def __str__(self):
+        return self.ToString()
+
     def __add__(self, other):
         if isinstance(other, Output):
             return Outputs([self, other])
@@ -28,14 +31,14 @@ class Output:
         raise TypeError(f'Type [Output] Cannot add with Type [{type(other)}]')
     
     def __bool__(self):
-        return self.flag.value <= OutputFlag.Warn.value    
-
+        return self.flag.value <= OutputFlag.Warn.value
 
 class Outputs:
     #outputs:List[Output] = []
     
-    def __init__(self, outputs: List[Output] = []):
-        self.outputs = outputs
+    def __init__(self, outputs: List[Output] = None, showFlag: bool = True):
+        self.outputs = outputs or []
+        self.showFlag = showFlag
     
     @staticmethod
     def FromStr(flag: OutputFlag, content: str):
@@ -48,21 +51,27 @@ class Outputs:
     def Result(self) -> OutputFlag:
         if len(self.outputs) == 0:
             return OutputFlag.Empty
-        return OutputFlag(max([x.flag.value for x in self.outputs]))
+        return OutputFlag(max(x.flag.value for x in self.outputs))
     
     @property
     def ResultStr(self) -> str:
         return self.Result.name
     
-    def __str__(self):
-        if len(self.outputs) == 0:
+    def ToString(self, showFlag: bool = None, sep: str = None) -> str:
+        if showFlag is None:
+            showFlag = self.showFlag
+        if len(self.outputs) == 0 or all(x.flag == OutputFlag.Empty for x in self.outputs):
             return ""
-        if len(set([x.flag for x in self.outputs])) == 1:
-            return f'{self.outputs[0].flag.name}: {" ".join([x.content for x in self.outputs])}'
-        return "\n".join(str(x) for x in self.outputs)
-    
-    def ToString(self) -> str:
-        return str(self)
+        if len({x.flag for x in self.outputs}) == 1:
+            sep = sep or " "
+            x = f'{self.outputs[0].flag.name}: '
+            y = f'{sep.join([x.content for x in self.outputs])}'
+            return f'{x if showFlag else ""}{y}'            
+        sep = sep or "\n"
+        return sep.join(x.ToString(showFlag) for x in self.outputs if x.flag != OutputFlag.Empty)
+
+    def __str__(self):
+        return self.ToString()
     
     def __add__(self, other):
         if isinstance(other, Output):
@@ -83,9 +92,9 @@ class Outputs:
     def __bool__(self):
         if len(self.outputs) == 0:
             return True
-        return max([x.flag.value for x in self.outputs]) <= OutputFlag.Warn.value
+        return max(x.flag.value for x in self.outputs) <= OutputFlag.Warn.value
     
-if __name__ == "__main__":    
+if __name__ == "__main__":
     ...
     # def MyTestFunc() -> Outputs:
     #     return Outputs([Output(OutputFlag.Skip, "11"), Output(OutputFlag.Warn, "22"), Output(OutputFlag.Succeed, "33")])

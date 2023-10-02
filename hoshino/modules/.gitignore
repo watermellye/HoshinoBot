@@ -6,6 +6,9 @@
 !/autobox/
 !/autobox/**
 
+!/auto_captcha/
+!/auto_captcha/**
+
 !/botmanage/
 !/botmanage/**
 
@@ -26,6 +29,9 @@
 
 !/priconne/myweb/
 !/priconne/myweb/**
+
+!/utils/
+!/utils/**
 
 __pycache__/
 __pycache__/**/

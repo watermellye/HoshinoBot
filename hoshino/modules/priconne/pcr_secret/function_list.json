@@ -479,7 +479,7 @@
     "allin_normal_temp": {
         "brief": "预置权重刷图",
         "cn": "AllIn当期N图",
-        "description": "将所有剩余体力以4:12:18:36:36:27投入N49-8/10/11/12/13/14。此为临时功能，每月不定更新。",
+        "description": "将所有剩余体力以1:1投入N50-13/14。此为临时功能，每月不定更新。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -655,10 +655,34 @@
         "implemented": true,
         "default": true
     },
+    "give_gift": {
+        "brief": "好感度提升",
+        "cn": "角色好感度提升",
+        "description": "给所有好感度未满的角色喂蛋糕。若开启该功能，将在触发一次后自动关闭（下同）。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
+    "read_chara_story": {
+        "brief": "阅读角色剧情",
+        "cn": "观看角色剧情",
+        "description": "观看所有已解锁但尚未阅读的角色剧情。剧情列表更新相较游戏可能有滞后（下同）。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
     "read_main_story": {
         "brief": "阅读主线剧情",
         "cn": "观看主线剧情",
-        "description": "若开启该功能，将在触发一次后自动关闭（下同）。剧情列表更新相较游戏可能有滞后（下同）。",
+        "description": "",
         "type": "bool",
         "candidate_value": [
             true,
