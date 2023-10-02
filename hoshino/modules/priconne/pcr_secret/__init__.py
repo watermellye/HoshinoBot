@@ -2380,7 +2380,7 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
         full_story = True
         if '(' in chara.fromid(id4).name: # 非原皮角色剧情不满
             full_story = False
-        if id4 not in [1061, 1068, 1070, 1071, 1092, 1093, 1094, 1097, 1098, 1099, 1701, 1702]: # 七冠，联动角色，环奈剧情不满
+        if id4 in [1061, 1068, 1070, 1071, 1092, 1093, 1094, 1097, 1098, 1099, 1701, 1702]: # 七冠，联动角色，环奈剧情不满
             full_story = False
         if (id4 * 1000 + 8) not in cache_chara_story_list: # 上面的列表可能更新不及时，添加此判断：该角色缓存中无8话剧情则视为不满
             full_story = False
@@ -2396,6 +2396,7 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
                 max_read_id = 3
             else:
                 max_read_id = love_level - 4
+
         if max_read_id <= already_read_id:
             continue
         for read_id in range(already_read_id + 1, max_read_id + 1):

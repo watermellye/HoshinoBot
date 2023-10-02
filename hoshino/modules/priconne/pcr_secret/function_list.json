@@ -13,8 +13,8 @@
     },
     "clan_battle_allow_cron": {
         "brief": "",
-        "cn": "允许会战期间触发定时清日常",
-        "description": "允许在公会战期间触发定时清日常。（包括购买经验瓶/强化石）",
+        "cn": "允许会战期间触发定时任务",
+        "description": "允许在公会战期间触发定时清日常（若有设置）、一天四次购买经验瓶/强化石（若有设置）、一天三次发起捐赠（若有设置）。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -631,6 +631,18 @@
         "implemented": true,
         "default": "disabled"
     },
+    "clan_equip_donation_mode": {
+        "brief": "发起捐赠请求",
+        "cn": "发起捐赠方式",
+        "description": "follow=跟随清日常, all=一天发起三次",
+        "type": "enum",
+        "candidate_value": [
+            "follow",
+            "all"
+        ],
+        "implemented": false,
+        "default": "follow"
+    },
     "clan_chara_support": {
         "brief": "挂满支援",
         "cn": "挂满支援",
@@ -667,22 +679,10 @@
         "implemented": true,
         "default": false
     },
-    "read_chara_story": {
-        "brief": "阅读角色剧情",
-        "cn": "观看角色剧情",
-        "description": "观看所有已解锁但尚未阅读的角色剧情。剧情列表更新相较游戏可能有滞后（下同）。",
-        "type": "bool",
-        "candidate_value": [
-            true,
-            false
-        ],
-        "implemented": true,
-        "default": false
-    },
     "read_main_story": {
         "brief": "阅读主线剧情",
         "cn": "观看主线剧情",
-        "description": "",
+        "description": "剧情列表更新相较游戏可能有滞后（下同）。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -726,5 +726,17 @@
         ],
         "implemented": true,
         "default": true
+    },
+    "read_chara_story": {
+        "brief": "阅读角色剧情",
+        "cn": "观看角色剧情",
+        "description": "观看所有已解锁但尚未阅读的角色剧情。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
     }
 }
