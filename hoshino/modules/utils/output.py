@@ -17,11 +17,11 @@ class Output:
         self.flag = flag
         self.content = content
     
-    def ToString(self, showFlag: bool = True) -> str:
+    def ToStr(self, showFlag: bool = True) -> str:
         return f'{self.flag.name}: {self.content}' if showFlag else f'{self.content}'
     
     def __str__(self):
-        return self.ToString()
+        return self.ToStr()
 
     def __add__(self, other):
         if isinstance(other, Output):
@@ -57,7 +57,7 @@ class Outputs:
     def ResultStr(self) -> str:
         return self.Result.name
     
-    def ToString(self, showFlag: bool = None, sep: str = None) -> str:
+    def ToStr(self, showFlag: bool = None, sep: str = None) -> str:
         if showFlag is None:
             showFlag = self.showFlag
         if len(self.outputs) == 0 or all(x.flag == OutputFlag.Empty for x in self.outputs):
@@ -68,10 +68,10 @@ class Outputs:
             y = f'{sep.join([x.content for x in self.outputs])}'
             return f'{x if showFlag else ""}{y}'            
         sep = sep or "\n"
-        return sep.join(x.ToString(showFlag) for x in self.outputs if x.flag != OutputFlag.Empty)
+        return sep.join(x.ToStr(showFlag) for x in self.outputs if x.flag != OutputFlag.Empty)
 
     def __str__(self):
-        return self.ToString()
+        return self.ToStr()
     
     def __add__(self, other):
         if isinstance(other, Output):

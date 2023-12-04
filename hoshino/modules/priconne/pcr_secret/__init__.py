@@ -306,8 +306,7 @@ async def 发号(bot, ev):
 @sv.on_prefix(("更新状态"))
 # 更新状态<@号><状态>
 async def 更新状态(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id
-                                                      not in group_manager):
+    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id not in group_manager):
         return
     dic = get_sec()
     ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
@@ -438,10 +437,6 @@ async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
     dic[qqid]["name"] = nam
     dic[qqid]["account"] = msg[0]
     dic[qqid]["password"] = msg[1]
-    try:
-        dic[qqid]["contact"] = msg[2]
-    except:
-        dic[qqid]["contact"] = ""
     dic[qqid]["updatetime"] = str(datetime.datetime.now())
     dic[qqid]["status"] = "1"
 
@@ -671,7 +666,6 @@ async def 加入密码本(bot, ev):
             dic[qqid]["name"] = qqid
             dic[qqid]["account"] = ""
             dic[qqid]["password"] = ""
-            dic[qqid]["contact"] = ""
             dic[qqid]["status"] = "3"
             dic[qqid]["updatetime"] = str(datetime.datetime.now())
             outp.append(f'{qqid}已被加入密码本')
@@ -2566,6 +2560,78 @@ async def read_trust_chapter(account_info):
     return '\n'.join(msg)
 
 
+async def eat_pudding(pcrClient: PcrApi) -> Outputs:    
+    pudding_event_id = 10080
+    
+    try:
+        events = await pcrClient.GetEvents()
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取当前活动列表失败：{e}')
+    
+    is_open = False
+    for event in events:
+        if event.event_type == 1 and event.period == 2 and event.event_id == pudding_event_id:
+            is_open = True
+            break
+    if not is_open:
+        return Outputs.FromStr(OutputFlag.Skip, "吃布丁活动已结束")
+    
+    try:
+        event_info = await pcrClient.GetEventInfo(pudding_event_id)
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取活动{pudding_event_id}信息失败：{e}')
+    
+    is_found = False
+    for boss_battle_info in event_info.boss_battle_info:
+        if boss_battle_info.boss_id == 1008001:
+            is_found = True
+            if not boss_battle_info.is_unlocked:
+                return Outputs.FromStr(OutputFlag.Abort, f'活动{pudding_event_id}的普通Boss尚未解锁，无法开启吃布丁小游戏')
+            if boss_battle_info.kill_num < 1:
+                return Outputs.FromStr(OutputFlag.Abort, f'活动{pudding_event_id}的普通Boss尚未通关，无法开启吃布丁小游戏')
+    if not is_found:
+        return Outputs.FromStr(OutputFlag.Abort, f'活动{pudding_event_id}的普通Boss尚未解锁，无法开启吃布丁小游戏')
+    
+    try:
+        pudding_info = await pcrClient.GetEatPuddingGameInfo()
+        material_item_id = pudding_info.psy_setting["material_item_id"]
+        get_pudding_frame_id_list = [x.frame_id for x in pudding_info.cooking_status] 
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取吃布丁小游戏信息失败：{e}')
+        
+    for drama in pudding_info.drama_list:
+        if not drama.read_status:
+            try:
+                await pcrClient.EatPuddingGameReadDrama(drama.drama_id)
+            except PcrApiException as e:
+                return Outputs.FromStr(OutputFlag.Error, f'阅读吃布丁小游戏剧情[{drama.drama_id}]失败：{e}')
+    
+    try:
+        stock = await pcrClient.GetItemStock(material_item_id)
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取布丁材料库存信息失败：{e}')
+    if stock <= 0:
+        return Outputs.FromStr(OutputFlag.Skip, f'布丁材料已用尽')
+    
+    outputs = Outputs()
+    total_use_pudding_num = 0
+    while stock > 0 or len(get_pudding_frame_id_list) > 0:
+        use_pudding_num = min(stock, 24)
+        start_cooking_frame_id_list = [x for x in range(1, use_pudding_num + 1)]
+        try:
+            await pcrClient.EatPuddingGameStartCook(start_cooking_frame_id_list, get_pudding_frame_id_list)
+        except PcrApiException as e:
+            outputs.append(OutputFlag.Error, f'制作布丁失败：{e}')
+            break
+        get_pudding_frame_id_list = start_cooking_frame_id_list
+        stock -= use_pudding_num
+        total_use_pudding_num += use_pudding_num
+    
+    if total_use_pudding_num > 0:
+        outputs.append(OutputFlag.Succeed, f'成功制作{total_use_pudding_num}个布丁')
+    return outputs
+    
+
 async def __star6_sweep(account_info, map_id, sweep_cnt, item_id, buy_stamina_passive_max) -> str:
     '''
     :returns: 将返回的字符串加入结果，继续执行后续逻辑
@@ -3543,11 +3609,12 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
         if config_key not in config_template:
             old_feature.append(config_key)
     if new_feature or old_feature:
+        function_list = get_comment()
         mm = ['清日常功能变化！']
         if old_feature:
             mm.append(f'被移除的功能：{" ".join(old_feature)}')
         if new_feature:
-            mm.append(f'新增的功能：{" ".join(new_feature)}')
+            mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
             # mm.append('如有需要，请私发“清日常设置”开启。')
         mm.append('已自动修正配置文件')
         mm = '\n'.join(mm)
@@ -3561,8 +3628,16 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
     if ev.group_id is not None:
         from ...botmanage.get_friend_info import is_friend
         if not await is_friend(ev.user_id, ev.self_id):
-            await bot.finish(ev, "Please friend me first then resend the instruction after 1 minute. You shall receive the url key privately.")
-    await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+            await bot.finish(ev, "请先添加ebq（本bot）为好友，等待一分钟后重新发送此指令。")
+    try:
+        await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+    except Exception as e:
+        if ev.group_id is not None:
+            await bot.send(ev, f'私发秘钥失败：{e}')
+    else:
+        if ev.group_id is not None:
+            await bot.send(ev, f'已私聊发送清日常设置秘钥，请查收')
+        
 
 
 def close_event_config(qqid):
@@ -3626,11 +3701,12 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         if config_key not in config_template:
             old_feature.append(config_key)
     if new_feature or old_feature:
+        function_list = get_comment()
         mm = ['清日常功能变化！']
         if old_feature:
             mm.append(f'被移除的功能：{" ".join(old_feature)}')
         if new_feature:
-            mm.append(f'新增的功能：{" ".join(new_feature)}')
+            mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
             mm.append('如有需要，请私发“清日常设置”开启。')
         mm.append('已自动修正配置文件。')
         mm = '\n'.join(mm)
@@ -3658,7 +3734,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         pass  # await bot.send_private_msg(user_id=int(qqid), message=f'Doing daily routine for {nam}.')
     progress = []
     try:
-        await _account_verify(bot, ev, qqid, account_info, 2, None if ev is None else ev.user_id)
+        await pcrClient.Login()
+        #await _account_verify(bot, ev, qqid, account_info, 2, None if ev is None else ev.user_id)
     except Exception as e:
         print_exc()
         if ev != None:
@@ -3752,7 +3829,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11050013:1, 11050014:1})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11052009:3, 11052010:2, 11052011:5, 11052012:10, 11052013:10, 11052014:5})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -3856,6 +3933,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         dic = get_sec()
         dic[qqid]["daily_config"]["read_trust_chapter"] = False
         save_sec(dic)
+    if config["eat_pudding"]:
+        progress.append(["eat_pudding", f'{await eat_pudding(pcrClient)}'])
     progress.append([f'{nam}', f'{await get_basic_info(account_info)}'])
     progress.append([f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', "发送[清日常结果]可重新调取本记录"])
 
@@ -4052,7 +4131,7 @@ async def __clear_event_ticket(semaphore: asyncio.Semaphore, qqid: str) -> str:
             await _account_verify(None, None, qqid, account_info, 2)
             await asyncio.sleep(1)
             progress = []
-            progress.append(f'{await event_hard_boss_sweep(account_info, "max")}')
+            progress.append(f'{await event_hard_boss_sweep(account_info, "max-2")}')
             # progress.append(f'{await event_mission_accept(account_info)}')
             progress.append(f'{await event_gacha(account_info)}')
             ret = "\n".join(progress)
@@ -4108,16 +4187,19 @@ def get_allow_cron() -> bool:
 async def __buy_exp_and_stone_cron(qqid: str) -> str:
     dic = get_sec()
     account_info = dic[qqid]
-    await asyncio.sleep(1)
-    await _account_verify(None, None, qqid, account_info, 2)
-    await asyncio.sleep(1)
     config = dic[qqid]["daily_config"]  
 
-    ret = await buy_exp_and_stone_shop(account_info, config["buy_exp_count"], config["buy_stone_count"])
-    if "经验瓶阈值" in ret and "强化石阈值" in ret:
+    try:
+        ret = await buy_exp_and_stone_shop(account_info, config["buy_exp_count"], config["buy_stone_count"])
+        if "经验瓶阈值" in ret and "强化石阈值" in ret:
+            dic = get_sec()
+            dic[qqid]["daily_config"]["buy_exp&stone_mode"] = "follow"
+            save_sec(dic)
+    except Exception as e:
         dic = get_sec()
         dic[qqid]["daily_config"]["buy_exp&stone_mode"] = "follow"
         save_sec(dic)
+        raise    
     return f'{ret}'
 
 
@@ -4758,5 +4840,9 @@ async def test_on_startup_interface():
     asyncio.create_task(test_on_startup())
     
 async def test_on_startup():
-    ...
-    #print(await read_chara_story(PcrApi(1104356549126)))
+    ...    
+    # dic = get_sec()
+    # account_info = dic['491673070']
+    # pcrClient = PcrApi(account_info)
+    # await pcrClient.Login()
+    # print(await eat_pudding(pcrClient))

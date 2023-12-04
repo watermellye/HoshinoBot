@@ -215,9 +215,14 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        _ = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 走个过场，模拟真实API触发顺序
+        others_info = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 真实API触发顺序
         res = await self.CallApi("/clan/join", {"clan_id": clan_id, "from_invite": 1})
         FarmInfo.update(clanid_cache=clan_id).where(FarmInfo.pcrid == self.Pcrid).execute()
+        try:
+            ClanInfo.update(clan_member_count_cache=1 + others_info["clan"]["detail"]["member_num"]).where(ClanInfo.clanid == clan_id).execute()
+            ClanInfo.update(clan_name_cache=others_info["clan"]["detail"]["clan_name"]).where(ClanInfo.clanid == clan_id).execute()
+        except Exception as e:
+            pass
     
     class CharaLoveInfoResponse(BaseModel):
         chara_id: int = Field(..., description="角色的4位ID")
@@ -368,10 +373,116 @@ class PcrApi:
         """
         Args:
             story_id (int): 7位ID。前四位为角色id，后三位为剧情id
+        Raises:
+            PcrApiException
         """
         await self.CallApi("/story/check", {"story_id": story_id}) # 每次读取剧情前都要先调用check
         await self.CallApi("/story/start", {"story_id": story_id}) # 只有第一次读剧情获取奖赏才需要 # 其实有返回，告诉你获得多少钻石
+    
+    class EventStatus(BaseModel):
+        event_type: int = Field(..., description="只应该为1")
+        event_id: int = Field(..., description="5位ID。10xxx为当前/复刻活动，20xxx为外传")
+        period: int = Field(..., description="1=没开放，2=开放中，3=已结束（不能刷图，可以换票和看剧情）")
+
+    class StoryStatus(BaseModel):
+        story_id: int = Field(..., description="7位ID。1开头=角色剧情，2开头=主线剧情，5开头=活动剧情，7开头=露娜塔剧情。")
+        is_unlocked: bool
+        is_readed: bool
+
+    class ItemInfo(BaseModel):
+        id: int
+        type: int
+        stock: int
+
+    class BossBattleInfo(BaseModel):
+        boss_id: int = Field(..., description="7位ID。前5位为活动ID，后2位为bossID（01=N，02=H，03=VH，04=SP，05=表演赛）")
+        is_unlocked: bool
+        appear_num: Optional[int] = 0
+        attack_num: Optional[int] = 0
+        kill_num: Optional[int] = 0
+        daily_kill_count: Optional[int] = 0
+        oneblow_kill_count: Optional[int] = 0
+        remain_time: Optional[int] = 90
+        is_force_unlocked: Optional[bool] = False
+
+    class EventInfoResponse(BaseModel):
+        event_status: 'PcrApi.EventStatus'
+        opening: 'PcrApi.StoryStatus'
+        ending: 'PcrApi.StoryStatus'
+        stories: List['PcrApi.StoryStatus']
+        boss_ticket_info: 'PcrApi.ItemInfo'
+        boss_battle_info: List['PcrApi.BossBattleInfo']
+        boss_enemy_info: List[Dict]
+        # login_bonus: Optional[List[Dict] | Dict] = None
+        # missions: List[Dict]
+        # is_hard_quest_unlocked: Optional[bool] = False
+        # special_battle_info: Optional[Dict] = {}
+        # release_minigame: Optional[List[int]] = []
         
+    async def GetEventInfo(self, event_id: int) -> EventInfoResponse:
+        """
+        Args:
+            event_id (int): 5位ID。10xxx
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.EventInfoResponse(**(await self.CallApi("/event/hatsune/top", {"event_id": event_id})))
+    
+    async def GetEvents(self) -> List[EventStatus]:
+        """
+        Raises:
+            PcrApiException
+        """
+        return [PcrApi.EventStatus(**x) for x in (await self.GetLoadIndexRaw()).get("event_statuses", [])]
+
+
+    class EatPuddingGameCookingInfo(BaseModel):
+        frame_id: int = Field(..., description="坑位，1~24")
+        pudding_id: int
+        start_time: str
+
+
+    class EatPuddingGameOwnInfo(BaseModel):
+        pudding_id: int
+        count: int
+        flavor_status: int = Field(..., description="解锁文案数。0~3")
+        read_status: bool
+
+    class EatPuddingGameDramaInfo(BaseModel):
+        drama_id: int
+        read_status: bool
+
+    # EatPuddingGameInfoResponse model with nested structures
+    class EatPuddingGameInfoResponse(BaseModel):
+        psy_setting: Dict
+        cooking_status: List['PcrApi.EatPuddingGameCookingInfo']
+        total_count: int
+        pudding_note: List['PcrApi.EatPuddingGameOwnInfo']
+        pudding_type_num: int
+        drama_list: List['PcrApi.EatPuddingGameDramaInfo']
+
+    async def GetEatPuddingGameInfo(self) -> EatPuddingGameInfoResponse:
+        """
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.EatPuddingGameInfoResponse(**(await self.CallApi("/psy/top", {"from_system_id": 6001})))
+    
+    async def EatPuddingGameReadDrama(self, drama_id: int) -> None:
+        """
+        Args:
+            drama_id (int): 1~11
+        Raises:
+            PcrApiException
+        """
+        await self.CallApi("/psy/read_drama", {"drama_id": drama_id, "from_system_id": 6001})
+    
+    async def EatPuddingGameStartCook(self, start_cooking_frame_id_list: List[int], get_pudding_frame_id_list: List[int]) -> None:
+        """
+        Raises:
+            PcrApiException
+        """
+        await self.CallApi("/psy/start_cooking", {"start_cooking_frame_id_list": start_cooking_frame_id_list, "get_pudding_frame_id_list": get_pudding_frame_id_list, "from_system_id": 6001})
 
     @staticmethod
     def CharaOutputName(chara_id: int) -> str:

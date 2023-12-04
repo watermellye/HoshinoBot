@@ -18,6 +18,7 @@ from ..autopcr_db.autopcr_database_table import AutopcrDatabaseTable
 from ..query import query
 from ..query.PcrApi import PcrApi, PcrApiException
 
+# [退出公会] 自行退出当前公会。自行退出公会后需24H才能加入新公会。
 sv_help = '''
 免费BCR装备农场！
 指令列表：
@@ -205,7 +206,7 @@ async def EnterFarmInterface(bot: HoshinoBot, ev: CQEvent):
         bot.finish(ev, f'pcrid应为13位数字，您输入了[{pcrid}]\n示例：加入农场 1234567890123')
 
     try:
-        await bot.send(ev, str(await EnterFarm(int(pcrid), qqid)))
+        await bot.send(ev, (await EnterFarm(int(pcrid), qqid)).ToStr(sep="\n"))
     except Exception as e:
         bot.finish(ev, f'邀请[{pcrid}]加入农场失败：{e}')
 
@@ -269,7 +270,13 @@ async def EnterFarm(pcrid: int, qqid: Union[int, None]) -> Outputs:
         raise PcrApiException(f'邀请加入公会失败：{e}') from e
 
     asyncio.create_task(RevokeClanInviteAfterDelay(clanRecord.leader_pcrid_cache, clanRecord.clan_name_cache, pcrid, 7200))
-    outputs.append(OutputFlag.Succeed, f'成功邀请{userInfoStr}进入农场[{clanRecord.clan_name_cache}]\n请在2小时内接受此邀请')
+    outputs.append(OutputFlag.Succeed, f'成功邀请{userInfoStr}进入农场[{clanRecord.clan_name_cache}]。请在2小时内接受此邀请')
+    
+    try:
+        outputs += await AcceptClanInvite(pcrid, clanRecord.leader_pcrid_cache)    
+    except Exception as e:
+        pass
+    
     return outputs
 
 
@@ -452,8 +459,8 @@ async def QuitFarm(pcrid: int) -> Output:
         inviteId = [x["invite_id"] for x in inviteRes["list"] if x["viewer_id"] == pcrid]
     except Exception as e:
         print_exc()
-        hoshino.logger.error(f'使用会长账号查看当前邀请列表失败：{e}')
-        return Output(OutputFlag.Error, f'使用会长账号查看当前邀请列表失败：{e}')
+        hoshino.logger.error(f'使用会长账号[{leaderPcrid}]查看当前邀请列表失败：{e}')
+        return Output(OutputFlag.Error, f'使用会长账号[{leaderPcrid}]查看当前邀请列表失败：{e}')
     if len(inviteId):
         inviteId:int = inviteId[0]
         try:
@@ -941,15 +948,36 @@ async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
     
     return Outputs.FromStr(OutputFlag.Succeed, f'账号{pcrClient.OutputName}接受公会[{targetClanId}]邀请成功')
 
-# TODO 使用会长号踢除某个账号
 
-# TODO 自己退出一个公会
+@sv.on_fullmatch(("退出公会"))
+async def QuitClanSelfConfirmInterface(bot: HoshinoBot, ev: CQEvent):
+    ...
+    # TODO
+    # 如果在农场，则转移至退出农场
+    # 否则提示退出公会有1天冷却期
 
+async def QuitClanSelfConfirm():
+    ...
+    # TODO
+    
+
+@sv.on_fullmatch(("#退出公会"))
+async def QuitClanSelfInterface(bot: HoshinoBot, ev: CQEvent):
+    ...
+    # TODO
+
+
+async def QuitClanSelf():
+    ...
+    # TODO
+    # 判断自己是否是会长
+    
+    
 async def ForTest():
     ...
-    
-    # members = []
-    # leader = 0 
+
+    # members = [1393560518763]
+    # leader = 1370335173164
     # for member in members:
     #     print(await InviteToClan(leader, member))
     #     print(await AcceptClanInvite(member, leader))

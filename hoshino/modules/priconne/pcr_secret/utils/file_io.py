@@ -5,8 +5,8 @@ import shutil
 from datetime import datetime
 import hoshino
 
-def GetNowTimestamp() -> int:
-    return int(datetime.timestamp(datetime.now()))
+# def GetNowTimestamp() -> int:
+#     return int(datetime.timestamp(datetime.now()))
 
 class _FileIo:
     def __init__(self):
@@ -35,20 +35,21 @@ class _FileIo:
             try:
                 return json.load(fp)
             except Exception as e:
-                hoshino.logger.error(f'AutoPcr: 读取{"ingame_data.json"}失败：{e}尝试备份文件并重置')
-                try:
-                    bak = f'ingame_data.json.{GetNowTimestamp()}.bak'
-                    shutil.copy(self.dataDir / "ingame_data.json", self.dataDir / bak)
-                    hoshino.logger.error(f'AutoPcr: 原始文件已备份至{bak}')
-                except Exception as e:
-                    hoshino.logger.error(f'AutoPcr: 备份失败：{e}')
-                else:
-                    try:
-                        with open(self.dataDir / "ingame_data.json", "w", encoding="utf-8") as fp:
-                            json.dump({}, fp, indent=4, ensure_ascii=False)
-                        hoshino.logger.error(f'AutoPcr: 重置完毕')
-                    except Exception as e:
-                        hoshino.logger.error(f'AutoPcr: 重置失败：{e}')
+                hoshino.logger.error(f'AutoPcr: 读取{"ingame_data.json"}失败：{e}')
+                # hoshino.logger.error(f'AutoPcr: 读取{"ingame_data.json"}失败：{e}尝试备份文件并重置')
+                # try:
+                #     bak = f'ingame_data.json.{GetNowTimestamp()}.bak'
+                #     shutil.copy(self.dataDir / "ingame_data.json", self.dataDir / bak)
+                #     hoshino.logger.error(f'AutoPcr: 原始文件已备份至{bak}')
+                # except Exception as e:
+                #     hoshino.logger.error(f'AutoPcr: 备份失败：{e}')
+                # else:
+                #     try:
+                #         with open(self.dataDir / "ingame_data.json", "w", encoding="utf-8") as fp:
+                #             json.dump({}, fp, indent=4, ensure_ascii=False)
+                #         hoshino.logger.error(f'AutoPcr: 重置完毕')
+                #     except Exception as e:
+                #         hoshino.logger.error(f'AutoPcr: 重置失败：{e}')
                 raise
     
     @IngameData.setter
@@ -74,5 +75,11 @@ class _FileIo:
         d = self.IngameData
         d["chara_story_list"] = value
         self.IngameData = d
+    
+    @property
+    def Config(self) -> Dict[str, Any]:
+        with open(self.configFilepath, "r", encoding="utf-8") as fp:
+            return json.load(fp)
+            
     
 gs_fileIo = _FileIo()

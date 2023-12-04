@@ -88,11 +88,12 @@ def auto_correct(qqid: str):
         if config_key not in config_template:
             old_feature.append(config_key)
     if new_feature or old_feature:
+        function_list = get_comment()
         mm = ['清日常功能变化！']
         if old_feature:
             mm.append(f'被移除的功能：{" ".join(old_feature)}')
         if new_feature:
-            mm.append(f'新增的功能：{" ".join(new_feature)}')
+            mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
         mm.append('已自动修正配置文件')
         mm.append('请阅读以上信息，随后刷新本页面以进入清日常设置')
         mm = '\n'.join(mm)
