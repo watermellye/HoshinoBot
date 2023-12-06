@@ -4,7 +4,7 @@ from json import load, dump, dumps
 import shutil
 import asyncio
 import nonebot
-from ..pcr_secret import __do_daily
+from ..pcr_secret import __do_daily, get_sec, save_sec
 import datetime
 import hashlib
 import random
@@ -55,17 +55,17 @@ def allow_cron() -> bool:
     return f
 
 
-def get_sec():
-    sec = gs_pcrSecretDir / 'secret.json'
-    with open(sec, "r", encoding="utf-8") as fp:
-        dic = load(fp)
-    return dic
+# def get_sec():
+#     sec = gs_pcrSecretDir / 'secret.json'
+#     with open(sec, "r", encoding="utf-8") as fp:
+#         dic = load(fp)
+#     return dic
 
 
-def save_sec(dic):
-    sec = gs_pcrSecretDir / 'secret.json'
-    with open(sec, "w", encoding="utf-8") as fp:
-        dump(dic, fp, ensure_ascii=False, indent=4)
+# def save_sec(dic):
+#     sec = gs_pcrSecretDir / 'secret.json'
+#     with open(sec, "w", encoding="utf-8") as fp:
+#         dump(dic, fp, ensure_ascii=False, indent=4)
 
 
 def auto_correct(qqid: str):
@@ -169,6 +169,38 @@ async def config_page():
                 return await render_template("404.html", error_code=410, message=msg)
             return await render_template("config_page.html", qqname=config.get('name', ""), qqid=qqid, pcrname=config.get('pcrname', ""), pcrid=config.get('pcrid', ""), config=dumps(config_with_comment(config["daily_config"]), ensure_ascii=False, indent=4))
     return await render_template("404.html", message="找不到该用户")
+
+
+@auto_pcr_web.route('/login', methods=['GET'])
+async def login_page():
+    return await render_template("login.html")
+
+
+@auto_pcr_web.route('/api/login', methods=['POST'])
+async def login():
+    try:
+        data = await request.form
+        qqid:str = str(data.get('field_qq_id'))
+        if len(qqid) == 0:
+            return await make_response_json(400, "QQ不可为空")
+        pcr_password:str = str(data.get('field_pcr_password'))
+        if len(pcr_password) == 0:
+            return await make_response_json(400, "PCR密码不可为空")
+    except:
+        return await make_response_json(400, "请求格式错误")
+    
+    dic = get_sec()
+    
+    if dic.get(qqid, {}).get("password", "") != pcr_password:
+        return await make_response_json(406, "账号或密码错误")
+    if "pcrid" not in dic[qqid]:
+        return await make_response_json(406, "没有账号基础信息")
+    if "url_key" not in dic[qqid]:
+        dic[qqid]["url_key"] = MyHash(f'{qqid}{dic[qqid]["pcrid"]}')
+        save_sec(dic)
+
+    return await make_response_json(200, f'/autopcr/config?url_key={dic[qqid]["url_key"]}')
+    
 
 
 @auto_pcr_web.route('/api/trigger_daily', methods=['POST'])

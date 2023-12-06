@@ -1,0 +1,49 @@
+{% extends "base.html" %} {% block title %}
+<title>登录</title>
+{% endblock %} {% block css %} {{ super() }} {% endblock %} {% block header %} {{ super() }} {% endblock %} {% block main %}
+<!-- main-area -->
+<main>
+    <section class="shop--area shop-right-sidebar pt-90 pb-90">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-6">
+                    <div class="card-wrapper">
+                        <div class="card fat">
+                            <div class="card-body">
+                                <h4 class="card-title">密码登录</h4>
+                                <form method="POST" novalidate="">
+                                    <div class="form-group">
+                                        <label for="field_qq_id">QQ</label>
+                                        <input id="field_qq_id" type="text" class="form-control" name="X" placeholder="请输入QQ号（注意：不是PCR账号）" required autofocus />
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="field_pcr_password">PCR密码</label>
+                                        <input id="field_pcr_password" type="text" class="form-control" name="Y" placeholder="请输入PCR密码（注意：不是QQ密码）" required />
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-block" onclick="password_login()">登录</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+<!-- main-area-end -->
+
+{% endblock %} {% block footer %} {{ super() }} {% endblock %} {% block js %} {{ super() }}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+<script src="{{url_for('autopcr.static',filename='js/my-login.js')}}"></script>
+<script type="text/javascript">
+    function password_login() {
+        $.post("/autopcr/api/login", { field_qq_id: $("#field_qq_id").val(), field_pcr_password: $("#field_pcr_password").val() }, function (ret) {
+            if (ret.statusCode != 200) {
+                suspend("alert-danger", "登陆失败 " + ret.message);
+            } else {
+                window.location.href = window.location.origin + ret.message;
+            }
+        });
+    }
+</script>
+{% endblock %}

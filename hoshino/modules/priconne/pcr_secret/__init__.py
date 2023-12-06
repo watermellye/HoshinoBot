@@ -3625,23 +3625,9 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
         if config in config_old:
             dic[qqid]["daily_config"][config] = config_old[config]
     save_sec(dic)
-    
-    
-        
-    # if ev.group_id is not None:
-    #     from ...botmanage.get_friend_info import is_friend
-    #     if not await is_friend(ev.user_id, ev.self_id):
-    #         await bot.finish(ev, "请先添加ebq（本bot）为好友，等待一分钟后重新发送此指令。")
-    
+
     if ev.group_id is not None:
-        await bot.send(ev, f'请私聊发送此指令')
-        # try:
-        #     await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
-        #     #await bot.send_private_msg(user_id=ev.user_id, group_id=ev.group_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
-        # except Exception as e:
-        #     await bot.send(ev, f'私发秘钥失败。请私聊发送此指令。\n原始报错：{e}')
-        # else:
-        #     await bot.send(ev, f'已私聊发送清日常设置秘钥，请查收')
+        await bot.send(ev, f'{uri}/autopcr/login')
     else:
         await bot.send(ev, f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
         
