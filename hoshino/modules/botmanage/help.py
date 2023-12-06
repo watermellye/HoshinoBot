@@ -6,7 +6,7 @@ sv = Service('_help_', manage_priv=priv.SUPERUSER, visible=False)
 TOP_MANUAL = '''
 本bot功能：
 PCR装备农场：请发送[农场帮助]
-PCR自定清日常：请发送[pcr账号帮助]
+PCR自定清日常：请发送[pcr帮助]
 
 ※本bot源码：
 github.com/watermellye/HoshinoBot/

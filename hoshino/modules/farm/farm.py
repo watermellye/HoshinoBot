@@ -761,6 +761,7 @@ async def FindDonationRequestInterface(bot: HoshinoBot, ev: CQEvent):
 
 async def FindDonationRequest() -> None:
     for farmId in GetFarmIds():
+        invalid_requests:List[int] = []
         farmInfoRecords:List[FarmInfo] = FarmInfo.select().where((FarmInfo.activated == 1) & (FarmInfo.clanid_cache == farmId) & (FarmInfo.today_donate_cache < 10)).order_by(FarmInfo.today_donate_cache.asc())
         if not farmInfoRecords.exists():
             continue
@@ -790,7 +791,7 @@ async def FindDonationRequest() -> None:
                 continue
             
             # 过滤出8h内的请求
-            DonateMessageIds:List[int] = [x.get("message_id") for x in clanInfoList.get("clan_chat_message", []) if x.get("message_type", -1) == 2 and serverTime - x.get("create_time", -1) < 8 * 3600 - 30]
+            DonateMessageIds:List[int] = [x["message_id"] for x in clanInfoList.get("clan_chat_message", []) if ("message_id" in x) and (x.get("message_type", -1) == 2) and (serverTime - x.get("create_time", -1) < 8 * 3600 - 60 * 30) and (x["message_id"] not in invalid_requests)]
             # 进一步过滤出未捐赠完毕的请求 
             equipRequests:List[dict] = [x for x in clanInfoList.get("equip_requests", []) if x.get("message_id", -1) in DonateMessageIds and x.get("donation_num", -1) < x.get("request_num", -1)]
             if len(equipRequests) == 0:
@@ -814,6 +815,7 @@ async def FindDonationRequest() -> None:
                 except Exception as e:
                     print_exc()
                     hoshino.logger.error(f'在农场[{farmId}]使用账号[{pcrid}]向捐赠请求[{equipRequest["message_id"]}]捐赠[{canDonateNum}]个装备失败：{e}')
+                    invalid_requests.append(equipRequest["message_id"])
                     continue
                 
                 farmInfoRecord.today_donate_cache = int(donateRes.get("donation_num", farmInfoRecord.today_donate_cache + canDonateNum))

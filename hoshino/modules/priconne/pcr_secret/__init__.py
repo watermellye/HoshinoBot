@@ -80,7 +80,7 @@ sec = join(curpath, 'secret.json')
 IOLock = threading.Lock()
    
 
-@sv.on_fullmatch(("pcr账号帮助"))
+@sv.on_fullmatch(("pcr帮助", "PCR帮助"))
 async def send_help(bot: HoshinoBot, ev: CQEvent):
     sv_help = [sv_help_all]
     if ev.user_id in group_manager:
@@ -453,7 +453,7 @@ async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
             await bot.send(ev, f'{qqid}的记录已{st}\nname={nam}\naccount={msg[0]}\n账号密码检验不通过：{info["message"]}，已置为错误。')
         else:
             await bot.send(ev, f'{qqid}的记录已{st}\nname={nam}\naccount={msg[0]}\n账号暂未校验。')
-            await bot.send_private_mse(user_id=admin_qqid_int, message=f'{qqid}的记录:\nname={nam}\naccount={msg[0]}\npassword={msg[1]}\n账号校验时异常：{info["message"]}')
+            await bot.send_private_msg(user_id=admin_qqid_int, message=f'{qqid}的记录:\nname={nam}\naccount={msg[0]}\npassword={msg[1]}\n账号校验时异常：{info["message"]}')
 
     save_sec(dic)
 
@@ -3422,7 +3422,8 @@ import hashlib
 
 def get_url_key(qqid):
     dic = get_sec()
-    dic[qqid]['url_key'] = hashlib.md5(f'{qqid}{dic[qqid]["pcrid"]}'.encode('utf-8')).hexdigest()
+    from ..myweb.run import MyHash
+    dic[qqid]['url_key'] = MyHash(f'{qqid}{dic[qqid]["pcrid"]}')
     save_sec(dic)
 
 
@@ -3625,20 +3626,25 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
             dic[qqid]["daily_config"][config] = config_old[config]
     save_sec(dic)
     
-    if ev.group_id is not None:
-        from ...botmanage.get_friend_info import is_friend
-        if not await is_friend(ev.user_id, ev.self_id):
-            await bot.finish(ev, "请先添加ebq（本bot）为好友，等待一分钟后重新发送此指令。")
-    try:
-        await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
-    except Exception as e:
-        if ev.group_id is not None:
-            await bot.send(ev, f'私发秘钥失败：{e}')
-    else:
-        if ev.group_id is not None:
-            await bot.send(ev, f'已私聊发送清日常设置秘钥，请查收')
+    
         
-
+    # if ev.group_id is not None:
+    #     from ...botmanage.get_friend_info import is_friend
+    #     if not await is_friend(ev.user_id, ev.self_id):
+    #         await bot.finish(ev, "请先添加ebq（本bot）为好友，等待一分钟后重新发送此指令。")
+    
+    if ev.group_id is not None:
+        await bot.send(ev, f'请私聊发送此指令')
+        # try:
+        #     await bot.send_private_msg(user_id=ev.user_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+        #     #await bot.send_private_msg(user_id=ev.user_id, group_id=ev.group_id, message=f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+        # except Exception as e:
+        #     await bot.send(ev, f'私发秘钥失败。请私聊发送此指令。\n原始报错：{e}')
+        # else:
+        #     await bot.send(ev, f'已私聊发送清日常设置秘钥，请查收')
+    else:
+        await bot.send(ev, f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
+        
 
 def close_event_config(qqid):
     dic = get_sec()

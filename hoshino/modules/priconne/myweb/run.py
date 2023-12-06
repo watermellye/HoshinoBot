@@ -17,7 +17,6 @@ auto_pcr_web = Blueprint('autopcr', __name__, template_folder="templates", stati
 bot = nonebot.get_bot()
 app = bot.server_app
 #app.config["SEND_FILE_MAX_AGE_DEFAULT"] = datetime.timedelta(seconds=3)
-app.register_blueprint(auto_pcr_web)
 
 def getNowtime() -> int:
     return int(datetime.datetime.timestamp(datetime.datetime.now()))
