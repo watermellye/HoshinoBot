@@ -4026,7 +4026,7 @@ async def _do_daily(bot: HoshinoBot, ev: CQEvent):
     if "daily_config" not in dic[qqid]:
         dic[qqid]["daily_config"] = get_config_template()
         save_sec(dic)
-        await bot.finish(ev, f'{nam}不存在清日常配置文件，已生成默认配置。\n请添加bot为好友后发送“清日常设置”。设置选项完毕后再次发送 #清日常。')
+        await bot.finish(ev, f'{nam}不存在清日常配置文件，已生成默认配置。\n请发送“清日常设置”。设置选项完毕后再次发送 #清日常。')
 
     if (int(qqid) != int(ev.user_id)) and (dic[qqid]["daily_config"].get("allow_ata_trigger", False) == False) and (int(ev.group_id) not in dic[qqid].get("allow_daily_trigger_group", [])):
         if (not priv.check_priv(ev, priv.SUPERUSER)):

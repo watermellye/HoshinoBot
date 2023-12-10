@@ -1,6 +1,7 @@
 /*
 !/.gitignore
 !/requirements.txt
+!/environment.yml
 !/README.md
 
 !/autobox/
