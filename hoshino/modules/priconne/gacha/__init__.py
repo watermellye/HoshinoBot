@@ -14,15 +14,23 @@ try:
 except:
     import json
 
+from hoshino.config import NICKNAME
+gs_nickname = NICKNAME if type(NICKNAME) == str else NICKNAME[0]
 
-sv_help = '''
-[星乃来发十连] 转蛋模拟
-[星乃来发单抽] 转蛋模拟
-[星乃来一井] 4w5钻！
+
+sv_help = f'''
+[{gs_nickname}来发十连] 转蛋模拟
+[{gs_nickname}来发单抽] 转蛋模拟
+[{gs_nickname}来一井] 4w5钻！
 [查看卡池] 模拟卡池&出率
 [切换卡池] 更换模拟卡池
 '''.strip()
 sv = Service('gacha', help_=sv_help, bundle='pcr娱乐')
+
+@sv.on_fullmatch('gacha帮助')
+async def gacha_help(bot: HoshinoBot, ev: CQEvent):
+    bot.finish(ev, sv_help)
+
 jewel_limit = DailyNumberLimiter(6000)
 tenjo_limit = DailyNumberLimiter(1)
 

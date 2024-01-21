@@ -8,6 +8,8 @@ import nonebot
 from peewee import fn, JOIN
 from datetime import datetime
 import random
+from functools import wraps
+import shutil
 
 import hoshino
 from hoshino.typing import CQEvent, HoshinoBot
@@ -18,7 +20,7 @@ from ..autopcr_db.autopcr_database_table import AutopcrDatabaseTable
 from ..query import query
 from ..query.PcrApi import PcrApi, PcrApiException
 
-# [退出公会] 自行退出当前公会。自行退出公会后需24H才能加入新公会。
+
 sv_help = '''
 免费BCR装备农场！
 指令列表：
@@ -33,8 +35,16 @@ sv_help_super = '''
 [农场踢除 <pcrid>] 
 [农场清空]
 [农场号]
-[农场转移 [<pcrid>] [<clanid>]]
+[#创建公会 <会长的pcrid> <公会名> <公会描述>]
+[#邀请加入公会 <会长的pcrid> <被邀请人的pcrid>]
+[#接受邀请 <被邀请人的pcrid> <邀请人（会长）的pcrid>]
+[#踢出公会 <会长的pcrid> <需移出公会的pcrid>]
+[添加农场号 <账号1> <密码1> <账号2> <密码2> ......]
+[#同步农场号配置文件至数据库]
+[#同步数据库信息至配置文件]
+[重命名 <pcrid1> <游戏名1> <pcrid2> <游戏名2> ......]
 '''.strip()
+# [#农场转移 <需要转移的pcrid> <旧会长pcrid> <新会长pcrid>]
 
 sv = hoshino.Service('farm', visible=False)
 
@@ -43,9 +53,11 @@ gs_accountPath = gs_currentDir / "data" / "account.json"
 
 
 @nonebot.on_startup
-async def SyncJson2DbOnStartup():
-    asyncio.create_task(SyncJson2Db())
-    asyncio.create_task(ForTest())
+async def OnStartup():
+    async def _():
+        await SyncJson2Db()
+        ... # you can test here
+    asyncio.create_task(_()) # run in background
 
 
 @sv.on_fullmatch(("农场帮助", "帮助农场"))
@@ -56,6 +68,91 @@ async def Help(bot: HoshinoBot, ev: CQEvent):
         await bot.finish(ev, sv_help)
 
 
+@sv.on_fullmatch(("#同步农场号配置文件至数据库"))
+async def SyncJson2DbInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    await bot.send(ev, "triggered")
+    try:
+        await SyncJson2Db()
+    except Exception as e:
+        await bot.send(ev, f'同步失败：{e}')
+    else:
+        await bot.send(ev, "Done")
+        await bot.send(ev, "\n".join([QueryStaffOffline(), "此为数据库离线查询结果。"]))
+
+
+@sv.on_fullmatch(("#同步数据库信息至配置文件"))
+async def SyncDb2JsonInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    await bot.send(ev, "triggered")
+    try:
+        await SyncDb2Json()
+    except Exception as e:
+        await bot.send(ev, f'同步失败：{e}')
+    else:
+        await bot.send(ev, "Done")
+        await bot.send(ev, "\n".join([QueryStaffOffline(), "此为数据库离线查询结果。"]))
+
+
+def single_instance_lock(lock):
+    def decorator(func):
+        @wraps(func)
+        async def wrapped(*args, **kwargs):
+            if lock.locked():
+                raise Exception(f"{func.__name__} is already running. Skipping this call.")
+            
+            async with lock:
+                return await func(*args, **kwargs)
+        
+        return wrapped
+    return decorator
+
+
+gs_SyncDb2JsonLock = asyncio.Lock()
+@single_instance_lock(gs_SyncDb2JsonLock)
+async def SyncDb2Json():
+    records = FarmInfo.select(FarmInfo, PcrAccountInfo.is_valid).join(PcrAccountInfo, on=(FarmInfo.pcrid == PcrAccountInfo.pcrid))
+    if records.exists():
+        for record in records:
+            record.activated = record.pcr_account_info.is_valid
+            record.save()
+
+    accounts = []
+    
+    query = FarmInfo.select(FarmInfo, PcrAccountInfo.account, PcrAccountInfo.password, PcrAccountInfo.pcrname_cache).join(PcrAccountInfo, JOIN.LEFT_OUTER, on=(FarmInfo.pcrid == PcrAccountInfo.pcrid)).order_by(FarmInfo.clanid_cache, PcrAccountInfo.pcrname_cache)
+    if query.exists():
+        for row in query:
+            if hasattr(row, 'pcr_account_info'):
+                account = {
+                    "pcr_name": row.pcr_account_info.pcrname_cache,
+                    "account": row.pcr_account_info.account,
+                    "password": row.pcr_account_info.password,
+                    "pcrid": row.pcrid,
+                    "clanid": row.clanid_cache,
+                    "activate": row.activated,
+                    "force_update": False
+                }
+            else:
+                account = {
+                    "pcrid": row.pcrid,
+                    "clanid": row.clanid_cache,
+                    "activate": row.activated,
+                    "force_update": False
+                }
+            accounts.append(account)
+    
+    if gs_accountPath.exists():
+        backup_file = gs_accountPath.with_suffix(f"{gs_accountPath.suffix}.{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        shutil.copy(gs_accountPath, backup_file)
+    
+    with gs_accountPath.open("w", encoding="utf-8") as fp:
+        json.dump(accounts, fp, ensure_ascii=False, indent=4)
+
+
+gs_SyncJson2DbLock = asyncio.Lock()
+@single_instance_lock(gs_SyncJson2DbLock)
 async def SyncJson2Db():
     assert Path.exists(gs_accountPath), "Skip. 无农场号配置文件，不执行同步。"
     try:
@@ -118,6 +215,82 @@ async def SyncJson2Db():
             json.dump(accounts, fp, ensure_ascii=False, indent=4)
 
     hoshino.logger.info("所有农场号同步完毕")
+
+
+@sv.on_prefix(("添加农场号"))
+async def AddFarmAccountConfirmInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) % 2 != 0:
+        await bot.send(ev, f'请发送[添加农场号 <账号1> <密码1> <账号2> <密码2> ......]（不含尖括号）')
+        return
+
+    accounts = {inputs[i]: inputs[i + 1] for i in range(0, len(inputs), 2)}
+    
+    await bot.send(ev, "请确认以下账号信息：\n" + "\n".join([f'{k} {v}' for k, v in accounts.items()]) + "\n发送以下指令以开始添加：")
+    await bot.send(ev, "#添加农场号 " + " ".join(inputs))
+
+
+@sv.on_prefix(("#添加农场号"))
+async def AddFarmAccountInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) % 2 != 0:
+        await bot.send(ev, f'请发送[添加农场号 <账号1> <密码1> <账号2> <密码2> ......]（不含尖括号）')
+        return
+    
+    accounts = {inputs[i]: inputs[i + 1] for i in range(0, len(inputs), 2)}
+    await bot.send(ev, str(AddFarmAccount(accounts)))
+
+
+def AddFarmAccount(new_account_dict: Dict[str, str]) -> Outputs:
+    outputs = Outputs()
+    
+    old_accounts: List[dict] = []
+    if not Path.exists(gs_accountPath):
+        outputs.append(OutputFlag.Info, f'无农场号配置文件，将在[{gs_accountPath}]创建新配置文件')
+    else:    
+        try:
+            with gs_accountPath.open("r", encoding="utf-8") as fp:
+                old_accounts = json.load(fp)
+        except Exception as e:
+            outputs.append(OutputFlag.Error, f'读取农场号配置文件[{gs_accountPath}]失败：{e}')
+            return outputs
+    
+    old_account_dict = {x["account"]: x.get("password", "") for x in old_accounts if "account" in x}
+    
+    same_account_names = [k for k, v in new_account_dict.items() if k in old_account_dict and v == old_account_dict[k]]
+    if len(same_account_names):
+        outputs.append(OutputFlag.Skip, f'以下账号的账密记录相同：{" | ".join(same_account_names)}')
+    
+    update_account_names = set([k for k, v in new_account_dict.items() if k in old_account_dict and v != old_account_dict[k]])
+    if len(update_account_names):
+        outputs.append(OutputFlag.Info, f'已更新以下账号的密码：{" | ".join(update_account_names)}')
+    
+    new_account_names = [k for k, v in new_account_dict.items() if k not in old_account_dict]
+    if len(new_account_names):
+        outputs.append(OutputFlag.Info, f'已添加以下新账号至配置：{" | ".join(new_account_names)}')
+    
+    if len(new_account_names) == 0 and len(update_account_names) == 0:
+        outputs.append(OutputFlag.Skip, '未更新任何账号')
+        return outputs
+    
+
+    old_accounts = [x for x in old_accounts if x["account"] not in update_account_names]
+    for account_name in new_account_names:
+        old_accounts.append({
+            "account": account_name,
+            "password": new_account_dict[account_name],
+            "force_update": True,
+            "activate": True
+        })
+    
+    with gs_accountPath.open("w", encoding="utf-8") as fp:
+        json.dump(old_accounts, fp, ensure_ascii=False, indent=4)
+    outputs.append(OutputFlag.Succeed, '已更新配置文件\n输入[#同步农场号配置文件至数据库]以同步至数据库')
+    return outputs
 
 
 class NotFoundException(Exception):
@@ -396,12 +569,6 @@ async def QuitFarmInterface(bot: HoshinoBot, ev: CQEvent):
             await bot.send(ev, f'将[{pcrid}]移出农场失败：{e}')
 
 
-# GetPcridsFromIdentityCodesReturn = namedtuple('GetPcridsFromIdentityCodesReturn', ['outputs', 'pcrids'])
-# GetPcridsFromIdentityCodesReturn.__annotations__ = {
-#     'outputs': Outputs,
-#     'pcrids': List[int],
-# }
-
 def GetPcridsFromIdentityCodes(qqid: int, identityCodes: List[str]) -> Tuple[Outputs, List[int]]:
     """
     查找绑定在qqid上且识别码足以唯一确定pcrid的记录。
@@ -539,7 +706,7 @@ def QueryBindOffline() -> str:
         .switch(FarmBind)
         .join(ClanInfo, JOIN.LEFT_OUTER, on=(FarmBind.permitted_clanid == ClanInfo.clanid))
         .where(FarmBind.permitted_clanid != 0)
-        .order_by(FarmBind.permitted_clanid.desc())
+        .order_by(FarmBind.permitted_clanid.asc())
     )
     if not query.exists():
         return "尚未准许任何人员进入农场"
@@ -742,21 +909,37 @@ def GetARandomBotAccount() -> PcrAccountInfo:
     
     farmInfoRecord: FarmInfo = FarmInfo.select().where(FarmInfo.activated == 1).order_by(fn.Random()).limit(1)
     if farmInfoRecord.exists():    
-        # TODO 尝试登录函数（bool）。不安全则函数内修改记录的activate为false；is_valid为false。
         return PcrAccountInfo.get(PcrAccountInfo.pcrid == farmInfoRecord[0].pcrid)
     raise NotFoundException("未找到激活的农场号")
+
+
+isDonatingLock = asyncio.Lock()
 
 
 @sv.scheduled_job('interval', seconds=14400)
 async def FindDonationRequestCron():
     if 3 <= datetime.now().hour <= 6:
         return  # 休息，留给清日常模块
-    await FindDonationRequest()
+    
+    if isDonatingLock.locked():
+        hoshino.logger.info(f'FindDonationRequestCron at {datetime.now()} skipped: FindDonationRequest is currently busy.')
+        
+    async with isDonatingLock:
+        await FindDonationRequest()
     
     
 @sv.on_fullmatch(('请求捐赠', '申请捐赠', '发起捐赠'))
 async def FindDonationRequestInterface(bot: HoshinoBot, ev: CQEvent):
-    await FindDonationRequest()
+    if isDonatingLock.locked():
+        bot.finish(ev, "bot已在进行捐赠，您的本次请求已被忽略")
+    
+    try:
+        await bot.send(ev, "triggered")
+    except Exception:
+        pass
+        
+    async with isDonatingLock:
+        await FindDonationRequest()
     
 
 async def FindDonationRequest() -> None:
@@ -766,8 +949,22 @@ async def FindDonationRequest() -> None:
         if not farmInfoRecords.exists():
             continue
         for farmInfoRecord in farmInfoRecords:
-            # TODO 更新today_donate_cache
             pcrid = farmInfoRecord.pcrid 
+            
+            try:
+                home_index = await query.get_home_index(pcrid)
+                today_donation_num = int(home_index["user_clan"]["donation_num"])
+            except Exception as e:
+                print_exc()
+                hoshino.logger.error(f'使用账号[{pcrid}]查看今日捐赠失败：{e}')
+            else:
+                if today_donation_num != farmInfoRecord.today_donate_cache:
+                    farmInfoRecord.today_donate_cache = today_donation_num
+                    farmInfoRecord.save()
+                
+                if today_donation_num >= 10:
+                    continue
+            
             try:
                 clanInfoList = await query.query(pcrid, '/clan/chat_info_list', {
                     "clan_id": farmId,
@@ -822,74 +1019,97 @@ async def FindDonationRequest() -> None:
                 farmInfoRecord.save()
 
 
-# @sv.on_prefix(("农场转移"))
-# async def FarmTransferInterface(bot: HoshinoBot, ev: CQEvent):
-#     if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
-#         return
-#     msg: List[str] = ev.message.extract_plain_text().strip().split()
-#     try:
-#         pcrid = int(msg[0])
-#         clanid = int(msg[1])
-#     except Exception as e:
-#         await bot.send(ev, f'{msg}无法被转换为[pcrid:int, clanid:int]')
-#     else:    
-#         await bot.send(ev, str(await FarmTransferInterface(pcrid, clanid)))
+@sv.on_fullmatch(("农场号"))
+async def QueryStaffOfflineInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    bot.finish(ev, "\n".join([QueryStaffOffline(), "此为数据库离线查询结果。"]))
+
+
+def QueryStaffOffline() -> str:
+    query = (
+        FarmInfo
+        .select(FarmInfo, PcrAccountInfo.pcrname_cache, ClanInfo.clan_name_cache, PcrAccountInfo.is_valid)
+        .join(PcrAccountInfo, JOIN.LEFT_OUTER, on=(FarmInfo.pcrid == PcrAccountInfo.pcrid))
+        .switch(FarmInfo)
+        .join(ClanInfo, JOIN.LEFT_OUTER, on=(FarmInfo.clanid_cache == ClanInfo.clanid))
+        .order_by(FarmInfo.clanid_cache, PcrAccountInfo.pcrname_cache)
+    )
+    if not query.exists():
+        return "没有任何农场号"
     
+    headers = [['pcrid', 'pcr_name', 'clanid', 'clan_name', '是否激活', '是否可登录']]
+    abnormal = []
+    activated = []
+    deactivated = []
+    last_clan_id = -1
+    for row in query:
+        if (not hasattr(row, 'pcr_account_info')) or (row.clanid_cache == 0) or (not hasattr(row, 'clan_info')) or row.pcr_account_info.is_valid != row.activated:
+            abnormal.append([
+                row.pcrid,
+                row.pcr_account_info.pcrname_cache if hasattr(row, 'pcr_account_info') else "Unknown",
+                row.clanid_cache,
+                "" if row.clanid_cache == 0 else (row.clan_info.clan_name_cache if hasattr(row, 'clan_info') else "Unknown"),
+                row.activated,
+                row.pcr_account_info.is_valid if hasattr(row, 'pcr_account_info') else "Unknown"
+            ])
+        elif row.activated:
+            if row.clanid_cache != last_clan_id:
+                if last_clan_id != -1:
+                    activated.append([]) # \n
+                last_clan_id = row.clanid_cache
+                clan_record: ClanInfo = ClanInfo.get_or_none(ClanInfo.clanid == last_clan_id)
+                if clan_record is None:
+                    activated.append([f'公会：Unknown({row.clanid_cache})'])
+                else:
+                    clan_name = clan_record.clan_name_cache
+                    leader_pcrid = clan_record.leader_pcrid_cache
+                    leader_name_record: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.pcrid == leader_pcrid)
+                    leader_name = "Unknown" if leader_name_record is None else leader_name_record.pcrname_cache
+                    activated.append([f'公会：{clan_name}({last_clan_id})', f'会长号：{leader_name}({leader_pcrid})'])
+                
+            activated.append([
+                row.pcrid,
+                row.pcr_account_info.pcrname_cache
+            ])
+        else:
+            deactivated.append([
+                row.pcrid,
+                row.pcr_account_info.pcrname_cache,
+                row.clanid_cache,
+                row.clan_info.clan_name_cache
+            ])
+
+    return "\n".join([" ".join([str(y) for y in x]) for x in (
+        headers
+        + [["\n异常："]] + (abnormal if len(abnormal) else [["无"]])
+        + [["\n已激活："]] + (activated if len(activated) else [["无"]])
+        + [["\n未激活："]] + (deactivated if len(deactivated) else [["无"]])
+    )])
+
+
+@sv.on_prefix(('#创建公会'))
+async def CreateClanInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) not in [2, 3]:
+        await bot.send(ev, f'请发送[#创建公会 <会长的pcrid> <公会名> <公会描述>]（不含尖括号）')
+        return
+    if (len(inputs)) == 2:
+        pcrid, clan_name = inputs
+        description = ""
+    elif (len(inputs)) == 3:
+        pcrid, clan_name, description = inputs
     
-# async def FarmTransfer(pcrid: int, clanid: int) -> Outputs:
-#     if clanid 无记录:
-#         return Outputs.FromStr(OutputFlag.Abort, f'[{clanid}]未被收录')
-#     if clanid的会长无账号记录:
-#         return Outputs.FromStr(OutputFlag.Abort, f'[{clanid}]的会长无账号记录')
-#     if clanid的会长账号记录不合法:
-#         return Outputs.FromStr(OutputFlag.Abort, f'[{clanid}]的会长账号记录不合法')
+    try:
+        pcrid: int = int(pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别pcrid[{pcrid}]')
+        return
     
-#     if pcrid is 农场号:
-#         now_clanid = pcrid 当前所在的 clanid
-#         if now_clanid == clanid:
-#             return Outputs.FromStr(OutputFlag.Skip, f'[{pcrid}]当前已位于[{clanid}]')
-        
-#         outputs = Outputs()
-#         if now_clanid != 0: # 当前正在其它农场，尝试离开
-#             outputs += await StaffQuitFarm(pcrid)
-#             if not outputs:
-#                 return outputs
-        
-#         outputs += await StaffEnterFarm(pcrid)
-#         return outputs
-        
-#     elif pcrid is 农场人员:
-#         now_clanid = pcrid 当前所在的 clanid
-#         qqid = pcrid 当前所绑的qqid
-#         if now_clanid == clanid:
-#             return Outputs.FromStr(OutputFlag.Skip, f'[{pcrid}]当前已位于[{clanid}]')
-        
-#         outputs = Outputs()
-#         if now_clanid != 0: # 当前正在其它农场，尝试离开
-#             outputs += await QuitFarm(pcrid)
-#             if not outputs:
-#                 return outputs
-        
-#         outputs += await EnterFarm(pcrid, qqid)
-#         return outputs
-        
-#     else:
-#         return Outputs.FromStr(OutputFlag.Abort, f'[{pcrid}]非农场号且非农场人员')
+    await bot.send(ev, str(await CreateClan(pcrid, clan_name, description)))
 
-
-# @sv.on_prefix(("农场号"))
-# async def QueryStaffOfflineInterface(bot: HoshinoBot, ev: CQEvent):
-#     if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
-#         return
-#     bot.finish(ev, "\n".join([QueryStaffOffline(), "此为数据库离线查询结果。"]))
-
-
-# def QueryStaffOffline() -> str:
-#     ...
-#     # TODO
-
-
-# TODO 测试用户拒绝邀请后的表现
 
 async def CreateClan(pcrid: int, clan_name: str, description: str = "") -> Outputs:
     """
@@ -900,37 +1120,103 @@ async def CreateClan(pcrid: int, clan_name: str, description: str = "") -> Outpu
         description (str, optional): 公会描述
     """
     try:
-        res = await PcrApi(pcrid).CreateClan(PcrApi.CreateClanRequest(clan_name=clan_name, description=description))
+        pcrClient = PcrApi(pcrid)
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
+    
+    try:
+        res = await pcrClient.CreateClan(PcrApi.CreateClanRequest(clan_name=clan_name, description=description))
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'[{pcrid}]创建公会[{clan_name}]失败：{e}')
+
     return Outputs.FromStr(OutputFlag.Succeed, f'[{pcrid}]创建公会[{clan_name}]({res.clan_id})成功')
+
+
+@sv.on_prefix(("#邀请进入公会", "#邀请加入公会"))
+async def InviteToClanInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) != 2:
+        await bot.send(ev, f'请发送[#邀请加入公会 <会长的pcrid> <被邀请人的pcrid>]（不含尖括号）')
+        return
+    leader_pcrid, invited_pcrid = inputs
+    
+    try:
+        leader_pcrid: int = int(leader_pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别会长pcrid[{leader_pcrid}]')
+        return
+    
+    try:
+        invited_pcrid: int = int(invited_pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别被邀请人pcrid[{invited_pcrid}]')
+        return
+
+    await bot.send(ev, str(await InviteToClan(leader_pcrid, invited_pcrid)))
 
 
 async def InviteToClan(leader_pcrid: int, invited_pcrid: int) -> Outputs:
     """
     尝试使用leader_pcrid账号对member_pcrid账号发起加入公会的邀请。
     如果正常返回说明成功，任何失败将抛出异常。
+    和EnterFarm不同，EnterFarm是根据容量自动选择一个农场。
     """
     
-    leaderPcrClient = PcrApi(leader_pcrid)
+    try:
+        leaderPcrClient = PcrApi(leader_pcrid)
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取账号[{leader_pcrid}]信息失败：{e}')
+
     try:
         invitedProfile = await leaderPcrClient.GetProfile(invited_pcrid)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]查看账号[{invited_pcrid}]信息失败：{e}')
     
-    if invitedProfile.get("clan_name", "") != "":
-        return Outputs.FromStr(OutputFlag.Abort, f'账号[{invited_pcrid}]已在公会[{invitedProfile["clan_name"]}]，无法邀请')
+    if invitedProfile.clan_name != "":
+        return Outputs.FromStr(OutputFlag.Abort, f'账号[{invited_pcrid}]已在公会[{invitedProfile.clan_name}]，无法邀请')
     
     try:
-        await leaderPcrClient.ClanInvite(PcrApi.ClanInviteRequest(invited_pcrid, "欢迎加入怡宝的装备农场！"))
+        await leaderPcrClient.ClanInvite(PcrApi.ClanInviteRequest(invited_pcrid))
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]邀请账号[{invited_pcrid}]加入公会失败：{e}')
 
     return Outputs.FromStr(OutputFlag.Succeed, f'使用会长账号[{leader_pcrid}]邀请账号[{invited_pcrid}]加入公会成功')
 
 
+
+@sv.on_prefix(('#接受邀请'))
+async def AcceptClanInviteInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) != 2:
+        await bot.send(ev, f'请发送[#接受邀请 <被邀请人的pcrid> <邀请人（会长）的pcrid>]（不含尖括号）')
+        return
+    pcrid, inviter_pcrid = inputs
+    
+    try:
+        pcrid: int = int(pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别被邀请人的pcrid[{pcrid}]')
+        return
+    
+    try:
+        inviter_pcrid: int = int(inviter_pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别邀请人（会长）的pcrid[{inviter_pcrid}]')
+        return
+
+    await bot.send(ev, str(await AcceptClanInvite(pcrid, inviter_pcrid)))
+
+
 async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
-    pcrClient = PcrApi(pcrid)
+    try:
+        pcrClient = PcrApi(pcrid)
+    except Exception as e:
+        return Output(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
+
     try:
         invitedClans = await pcrClient.GetInvitedClans()
     except PcrApiException as e:
@@ -951,35 +1237,154 @@ async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
     return Outputs.FromStr(OutputFlag.Succeed, f'账号{pcrClient.OutputName}接受公会[{targetClanId}]邀请成功')
 
 
-@sv.on_fullmatch(("退出公会"))
-async def QuitClanSelfConfirmInterface(bot: HoshinoBot, ev: CQEvent):
-    ...
-    # TODO
-    # 如果在农场，则转移至退出农场
-    # 否则提示退出公会有1天冷却期
-
-async def QuitClanSelfConfirm():
-    ...
-    # TODO
+@sv.on_prefix(("#退出公会", "#踢出公会"))
+async def KickFromClanInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) != 2:
+        await bot.send(ev, f'请发送[#踢出公会 <会长的pcrid> <需移出公会的pcrid>]（不含尖括号）')
+        return
+    leader_pcrid, member_pcrid = inputs
     
-
-@sv.on_fullmatch(("#退出公会"))
-async def QuitClanSelfInterface(bot: HoshinoBot, ev: CQEvent):
-    ...
-    # TODO
-
-
-async def QuitClanSelf():
-    ...
-    # TODO
-    # 判断自己是否是会长
+    try:
+        leader_pcrid: int = int(leader_pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别会长pcrid[{leader_pcrid}]')
+        return
     
-    
-async def ForTest():
-    ...
+    try:
+        member_pcrid: int = int(member_pcrid)
+    except Exception as e:
+        await bot.send(ev, f'无法识别需移出公会的pcrid[{member_pcrid}]')
+        return
 
-    # members = [1393560518763]
-    # leader = 1370335173164
-    # for member in members:
-    #     print(await InviteToClan(leader, member))
-    #     print(await AcceptClanInvite(member, leader))
+    await bot.send(ev, str(await KickFromClan(leader_pcrid, member_pcrid)))
+
+
+async def KickFromClan(leader_pcrid: int, member_pcrid: int) -> Output:
+    """
+    将member_pcrid移出leader_pcrid所在的公会（若在）。
+    将member_pcrid移出leader_pcrid所在的公会的入会申请列表（若在）。
+    将member_pcrid移出leader_pcrid所在的公会的邀请玩家列表（若在）。
+    
+    与QuitFarm方法不同，本方法需要传入会长号，但不要求双方位于农场中。
+    """
+    
+    try:
+        leader_pcrclient = PcrApi(leader_pcrid)
+    except Exception as e:
+        return Output(OutputFlag.Error, f'获取账号[{leader_pcrid}]信息失败：{e}')
+    
+    try:
+        clan_info = await leader_pcrclient.GetClanInfo()
+    except Exception as e:
+        return Output(OutputFlag.Error, f'无法获取账号[{leader_pcrid}]所在公会的详细信息')
+    
+    clan_id = clan_info.clan.detail.clan_id
+    clan_name = clan_info.clan.detail.clan_name
+    actual_leader_pcrid = clan_info.clan.detail.leader_viewer_id
+    if actual_leader_pcrid != leader_pcrid:
+        return Output(OutputFlag.Error, f'公会[{clan_name}]({clan_id})的会长为[{actual_leader_pcrid}]，而非传入的账号[{leader_pcrid}]')
+    
+    members = clan_info.clan.members
+    if any(True for x in members if x.viewer_id == member_pcrid): # Is in clan
+        try:
+            _ = await leader_pcrclient.RemoveFromClan(member_pcrid)
+        except PcrApiException as e:
+            return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})失败：{e}')
+        else:
+            return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})成功')
+    
+    join_requests = await leader_pcrclient.GetClanJoinRequestList(clan_id)
+    if any(True for x in join_requests if x.viewer_id == member_pcrid): # Is in join request list
+        try:
+            _ = await leader_pcrclient.RejectClanJoinRequest(clan_id, member_pcrid)
+        except PcrApiException as e:
+            return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的入会申请列表失败：{e}')
+        else:
+            return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的入会申请列表成功')
+    
+    invite_users = await leader_pcrclient.GetClanInviteUserList(clan_id)
+    for x in invite_users:
+        if x.viewer_id != member_pcrid:
+            continue
+        try:
+            _ = await leader_pcrclient.CancelClanInvite(x.invite_id)
+        except PcrApiException as e:
+            return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的邀请列表失败：{e}')
+        else:
+            return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的邀请列表成功')
+    
+    return Output(OutputFlag.Skip, f'[{member_pcrid}]既不在公会中，也不在入会申请列表中，也不在邀请玩家列表中')
+
+
+@sv.on_prefix(("重命名"))
+async def RenameConfirmInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) % 2 != 0:
+        await bot.send(ev, f'请发送[重命名 <pcrid1> <游戏名1> <pcrid2> <游戏名2> ......]（不含尖括号）')
+        return
+
+    pcrid2name = {inputs[i]: inputs[i + 1] for i in range(0, len(inputs), 2)}
+    unacceptable = [k for k in pcrid2name if not k.isdigit()]
+    if unacceptable:
+        await bot.send(ev, f'以下pcrid不合法：{", ".join(unacceptable)}')
+        await bot.send(ev, f'请发送[重命名 <pcrid1> <游戏名1> <pcrid2> <游戏名2> ......]（不含尖括号）')
+        return
+    pcrid2name = {int(k): v for k, v in pcrid2name.items()}
+    
+    await bot.send(ev, "请确认以下账号信息：\n" + "\n".join([f'[{k}]重命名为[{v}]' for k, v in pcrid2name.items()]) + "\n发送以下指令以开始添加：")
+    await bot.send(ev, "#重命名 " + " ".join(inputs))
+
+
+@sv.on_prefix(("#重命名"))
+async def RenameInterface(bot: HoshinoBot, ev: CQEvent):
+    if not hoshino.priv.check_priv(ev, hoshino.priv.SUPERUSER):
+        return
+    inputs: List[str] = ev.message.extract_plain_text().strip().split()
+    if len(inputs) % 2 != 0:
+        await bot.send(ev, f'请发送[重命名 <pcrid1> <游戏名1> <pcrid2> <游戏名2> ......]（不含尖括号）')
+        return
+    
+    pcrid2name = {inputs[i]: inputs[i + 1] for i in range(0, len(inputs), 2)}
+    unacceptable = [k for k in pcrid2name if not k.isdigit()]
+    if unacceptable:
+        await bot.send(ev, f'以下pcrid不合法：{", ".join(unacceptable)}')
+        await bot.send(ev, f'请发送[重命名 <pcrid1> <游戏名1> <pcrid2> <游戏名2> ......]（不含尖括号）')
+        return
+    pcrid2name = {int(k): v for k, v in pcrid2name.items()}
+    
+    await bot.send(ev, "triggered")
+    
+    semaphore = asyncio.Semaphore(5)
+    async def RenameWithSemaphore(pcrid, name) -> Output:
+        async with semaphore:
+            return await Rename(pcrid, name)
+        
+    rename_tasks = [RenameWithSemaphore(pcrid, name) for pcrid, name in pcrid2name.items()]
+    await bot.send(ev, Outputs(await asyncio.gather(*rename_tasks)).ToStr(True, "\n"))
+
+
+async def Rename(pcrid: int, name: int) -> Output:
+    try:
+        pcrclient = PcrApi(pcrid)
+    except Exception as e:
+        return Output(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
+    
+    try:
+        profile = await pcrclient.GetProfile(pcrid)
+    except PcrApiException as e:
+        return Output(OutputFlag.Error, f'获取账号[{pcrid}]的个人信息失败：{e}')
+    
+    if profile.user_info.user_name == name:
+        return Output(OutputFlag.Skip, f'账号[{pcrid}]的游戏内名称已为[{name}]，无需修改')
+    
+    try:
+        await pcrclient.Rename(name)
+    except PcrApiException as e:
+        return Output(OutputFlag.Error, f'账号[{pcrid}]由[{profile.user_info.user_name}]重命名为[{name}]失败：{e}')
+    else:
+        return Output(OutputFlag.Succeed, f'账号[{pcrid}]由[{profile.user_info.user_name}]重命名为[{name}]成功')

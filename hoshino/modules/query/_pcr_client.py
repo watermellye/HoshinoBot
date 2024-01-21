@@ -309,7 +309,7 @@ class PcrClient:
         if not gamestart['now_tutorial']:
             raise Exception("该账号没过完教程!")
 
-        await self.CallApi('/check/check_agreement', {})
+        #await self.CallApi('/check/check_agreement', {})
         self.needLoginAndCheck = False
         
         pcrid = int(self._viewerId)

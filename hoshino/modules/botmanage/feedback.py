@@ -1,6 +1,6 @@
 import hoshino
 from hoshino import Service, priv
-from hoshino.typing import CQEvent
+from hoshino.typing import CQEvent, HoshinoBot
 from hoshino.util import DailyNumberLimiter
 
 sv = Service('_feedback_', manage_priv=priv.SUPERUSER, help_='[来杯咖啡] 后接反馈内容 联系维护组')
@@ -10,7 +10,7 @@ lmt = DailyNumberLimiter(_max)
 EXCEED_NOTICE = f'您今天已经喝过{_max}杯了，请明早5点后再来！'
 
 @sv.on_prefix('来杯咖啡')
-async def feedback(bot, ev: CQEvent):
+async def feedback(bot: HoshinoBot, ev: CQEvent):
     uid = ev.user_id
     if not lmt.check(uid):
         await bot.finish(ev, EXCEED_NOTICE, at_sender=True)

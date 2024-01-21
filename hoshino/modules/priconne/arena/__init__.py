@@ -26,9 +26,10 @@ from math import log
 import cv2
 
 sv_help = '''
-[怎么拆] 接防守队角色名 查询竞技场解法
-[点赞] 接作业id 评价作业
-[点踩] 接作业id 评价作业
+查询请发送"b/r/tjjc+防守队伍"，无需+号。
+防守队伍可以是五个角色的昵称，也可以是截图。
+截图支持局部图片和全局图片，支持多队查询，支持未定队伍查询，支持近似查询。
+源码：https://github.com/watermellye/arena
 '''.strip()
 sv = Service('pcr-arena', help_=sv_help, bundle='pcr查询')
 
@@ -478,8 +479,9 @@ async def getUnit(img2):
         return uid_6, uid, "Unknown", 100 - similarity
 
 
-async def get_pic(address):
-    return await (await aiorequests.get(address, timeout=5)).content
+async def get_pic(address: str):
+    address = address.replace("&amp;", "&").split(",file_size=")[0] # temp
+    return await (await aiorequests.get(address, timeout=6)).content
 
 
 async def _arena_query(bot, ev: CQEvent, region: int):
@@ -799,7 +801,7 @@ async def __arena_query(bot, ev: CQEvent, region: int, defen="", raw=0, only_use
         msg = f'无法识别"{unknown}"' if score < 70 else f'无法识别"{unknown}" 您说的有{score}%可能是{name}'
         await bot.finish(ev, msg)
     if not defen:
-        await bot.finish(ev, '查询请发送"b/r/tjjc+防守队伍"，无需+号', at_sender=True)
+        await bot.finish(ev, sv_help, at_sender=True)
     if len(defen) > 5:
         await bot.finish(ev, '编队不能多于5名角色', at_sender=True)
     if len(defen) < 4:

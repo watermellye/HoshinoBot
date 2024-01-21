@@ -77,6 +77,16 @@ class _FileIo:
         self.IngameData = d
     
     @property
+    def MaxExploreLevel(self) -> int:
+        return self.IngameData.get("max_explore_level", 3)
+    
+    @MaxExploreLevel.setter
+    def MaxExploreLevel(self, value: int):
+        d = self.IngameData
+        d["max_explore_level"] = value
+        self.IngameData = d
+    
+    @property
     def Config(self) -> Dict[str, Any]:
         with open(self.configFilepath, "r", encoding="utf-8") as fp:
             return json.load(fp)

@@ -118,7 +118,8 @@ async def TryLogin(biliAccount:str, biliPassword:str, qqid:int = None) -> Tuple[
         Returns:
             如果成功则返回True；如果需要过码或过码失败则返回False
         """
-        if res.get("message", "") == "用户名或密码错误":
+        
+        if res.get("message", "") == "用户名或密码错误" or res.get("code", -1) == 500002:
             logger.info(f'登录失败：用户名或密码错误')
             PcrAccountInfo.update(is_valid=False, update_time=str(datetime.now())).where(PcrAccountInfo.account == biliAccount).execute()
             raise Exception("用户名或密码错误")

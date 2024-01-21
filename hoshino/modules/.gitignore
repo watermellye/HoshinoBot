@@ -23,13 +23,7 @@
 !/query/**
 
 !/priconne/
-/priconne/*
-
-!/priconne/pcr_secret/
-!/priconne/pcr_secret/**
-
-!/priconne/myweb/
-!/priconne/myweb/**
+!/priconne/**
 
 !/utils/
 !/utils/**

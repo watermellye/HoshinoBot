@@ -132,7 +132,8 @@
             false
         ],
         "implemented": true,
-        "default": false
+        "default": false,
+        "show": false
     },
     "horse_race": {
         "brief": "登录赛跑",
@@ -144,7 +145,8 @@
             false
         ],
         "implemented": true,
-        "default": false
+        "default": false,
+        "show": true
     },
     "clan_like": {
         "brief": "公会点赞",
@@ -173,14 +175,15 @@
     "explore": {
         "brief": "探索",
         "cn": "扫荡EXP和MANA探索",
-        "description": "",
-        "type": "bool",
+        "description": "'passed'表示扫荡当前您已通关的最高等级的探索；'max'表示仅尝试扫荡当前最高等级探索(13)，若您尚未通关则不扫荡。",
+        "type": "enum",
         "candidate_value": [
-            true,
-            false
+            "disabled",
+            "passed",
+            "max"
         ],
         "implemented": true,
-        "default": true
+        "default": "max"
     },
     "explore_cloister": {
         "brief": "回廊探索",
@@ -271,27 +274,27 @@
         ],
         "implemented": true,
         "default": 0
-    },
-    "buy_dungeon_shop": {
-        "brief": "地下城商店",
-        "cn": "地下城商店购买次数",
-        "description": "自动购买拥有数量<300的装备碎片（不含整装、不含角色碎片）。地下城币<10w时不生效。",
+    }, 
+    "jjc_pjjc_shop_limit":
+    {
+        "brief": "竞技场商店购买限额",
+        "cn": "竞技场商店购买限额",
+        "description": "含竞技场商店和公主竞技场商店",
         "type": "enum",
         "candidate_value": [
-            0,
-            1,
-            4,
-            7,
-            10,
-            13
+            100,
+            200,
+            300,
+            500,
+            800
         ],
         "implemented": true,
-        "default": 0
+        "default": 300
     },
     "buy_jjc_shop": {
         "brief": "竞技场商店",
         "cn": "竞技场商店购买次数",
-        "description": "自动购买拥有数量<100的装备碎片（不含整装、不含角色碎片）。竞技场币<5w时不生效。",
+        "description": "自动购买拥有数量小于上面设置的限额的装备碎片（不含整装、不含角色碎片）。竞技场币<5w时不生效。",
         "type": "enum",
         "candidate_value": [
             0,
@@ -307,7 +310,7 @@
     "buy_pjjc_shop": {
         "brief": "公主竞技场商店",
         "cn": "公主竞技场每天购买次数",
-        "description": "自动购买拥有数量<100的装备碎片（不含整装、不含角色碎片）。公主竞技场币<5w时不生效。",
+        "description": "自动购买拥有数量小于上面设置的限额的装备碎片（不含整装、不含角色碎片）。公主竞技场币<5w时不生效。",
         "type": "enum",
         "candidate_value": [
             0,
@@ -320,10 +323,55 @@
         "implemented": true,
         "default": 0
     },
+    "dungeon_flash_shop_limit":
+    {
+        "brief": "地下城和限时商店购买限额",
+        "cn": "地下城和限时商店购买限额",
+        "description": "",
+        "type": "enum",
+        "candidate_value": [
+            100,
+            200,
+            300,
+            500,
+            800,
+            1200
+        ],
+        "implemented": true,
+        "default": 500
+    },
+    "buy_dungeon_shop": {
+        "brief": "地下城商店",
+        "cn": "地下城商店购买次数",
+        "description": "自动购买拥有数量小于上面设置的限额的装备碎片（不含整装、不含角色碎片）。地下城币<10w时不生效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            4,
+            7,
+            10,
+            13
+        ],
+        "implemented": true,
+        "default": 0
+    },
+    "buy_flash_shop": {
+        "brief": "限时商店",
+        "cn": "购买限时商店",
+        "description": "自动购买拥有数量小于上面设置的限额的装备碎片（不含整装）。若上面开启了经验瓶购买，则限时商店中的经验瓶也会购买。MANA数量过少时不触发。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
     "dungeon_sweep": {
         "brief": "地下城扫荡",
         "cn": "扫荡地下城",
-        "description": "'passed'表示扫荡当前您已通关的最高等级的地下城；'max'表示仅尝试扫荡当前最高等级地下城(ex4)，若您尚未通关则不扫荡。",
+        "description": "'passed'表示扫荡当前您已通关的最高等级的地下城；'max'表示仅尝试扫荡当前最高等级地下城(ex5)，若您尚未通关则不扫荡。",
         "type": "enum",
         "candidate_value": [
             "disabled",
@@ -358,6 +406,18 @@
         "implemented": true,
         "default": 0
     },
+    "event_hard_config_reset": {
+        "brief": "此设置为其他功能的附加设置，不需要brief字段",
+        "cn": "无活动时重置H图设定",
+        "description": "在没有任何活动时，以下刷活动Hard图和Hard Boss的设定值自动置为关闭（disabled）。注意：在没有任何活动时，下方AllIn活动N图的设定总会自动关闭，不受本项控制。",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": true
+    },
     "event_hard_135": {
         "brief": "刷活动H1-1/3/5",
         "cn": "刷活动H1-1/3/5",
@@ -385,6 +445,21 @@
         ],
         "implemented": true,
         "default": "disabled"
+    },
+    "event_hard_boss_sweep": {
+        "brief": "扫荡活动HardBoss",
+        "cn": "扫荡活动HardBoss",
+        "description": "0=不扫荡，1=扫荡1次，max=清空扫荡券，max-1=留1次扫荡机会，max-2=留2次",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            1,
+            "max-2",
+            "max-1",
+            "max"
+        ],
+        "implemented": true,
+        "default": false
     },
     "xinsui_4": {
         "brief": "刷心碎4",
@@ -497,7 +572,7 @@
     "allin_normal_temp": {
         "brief": "预置权重刷图",
         "cn": "AllIn当期N图",
-        "description": "将所有剩余体力以3:2:5:10:10:5投入N52-9~14。此为临时功能，每月不定更新。",
+        "description": "将所有剩余体力以4:1:6投入N57-12/13/14。此为临时功能，每月不定更新。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -546,21 +621,6 @@
         "name": "allin",
         "default": false
     },
-    "event_hard_boss_sweep": {
-        "brief": "扫荡活动HardBoss",
-        "cn": "扫荡活动HardBoss",
-        "description": "max表示清空扫荡券，max-1用于留一次用来讨伐VHBoss。",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            1,
-            "max-2",
-            "max-1",
-            "max"
-        ],
-        "implemented": true,
-        "default": false
-    },
     "event_mission_accept": {
         "brief": "领取活动任务",
         "cn": "领取活动任务奖励",
@@ -577,18 +637,6 @@
         "brief": "交换讨伐证",
         "cn": "交换所有讨伐证",
         "description": "仅当当前列表为普通列表（不存在重置目标报酬）时生效。",
-        "type": "bool",
-        "candidate_value": [
-            true,
-            false
-        ],
-        "implemented": true,
-        "default": false
-    },
-    "flash_shop": {
-        "brief": "限时商店",
-        "cn": "购买限时商店",
-        "description": "自动购买拥有数量<300的装备碎片（不含整装）。若上面开启了经验瓶购买，则限时商店中的经验瓶也会购买。MANA数量过少时不触发。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -644,7 +692,8 @@
             "unlimited",
             "silver",
             "gold",
-            "purple"
+            "purple",
+            "red"
         ],
         "implemented": true,
         "default": "disabled"

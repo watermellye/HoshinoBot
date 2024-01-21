@@ -1,4 +1,4 @@
-from quart import render_template, request, url_for, make_response, jsonify, Blueprint, Response, send_from_directory
+from quart import render_template, request, url_for, make_response, jsonify, Blueprint, Response, send_from_directory, send_file
 from pathlib import Path
 from json import load, dump, dumps
 import shutil
@@ -10,7 +10,7 @@ import hashlib
 import random
 import string
 
-gs_currentDir = Path(__file__).parent
+gs_currentDir = Path(__file__).parent # myweb
 gs_pcrSecretDir = gs_currentDir.parent / "pcr_secret"
 
 auto_pcr_web = Blueprint('autopcr', __name__, template_folder="templates", static_folder='static', static_url_path='/static', url_prefix="/autopcr")
@@ -69,12 +69,17 @@ def allow_cron() -> bool:
 
 
 def auto_correct(qqid: str):
-    need_correct = False
-    mm = ""
-
     config_template = get_config_template()
     dic = get_sec()
 
+    if "daily_config" not in dic[qqid]:
+        dic[qqid]["daily_config"] = config_template
+        save_sec(dic)
+        return False, ""
+    
+    need_correct = False
+    mm = ""
+    
     config_old = dic[qqid]["daily_config"]
     dic[qqid]["daily_config"] = config_template
 
@@ -94,7 +99,7 @@ def auto_correct(qqid: str):
         if new_feature:
             mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
         mm.append('已自动修正配置文件')
-        mm.append('请阅读以上信息，随后刷新本页面以进入清日常设置')
+        #mm.append('请阅读以上信息，随后刷新本页面以进入清日常设置')
         mm = '\n'.join(mm)
         need_correct = True
 
@@ -142,16 +147,28 @@ async def result_page():
     for qqid in dic:
         config = dic[qqid]
         if config.get('url_key', "") == url_key:
-            webPath = url_for('autopcr.static', filename='img/icon/favicon.png')
-            
-            srcFp = gs_pcrSecretDir / "daily_result" / f'{qqid}.png'
-            if srcFp.exists():
-                webPath = url_for('autopcr.static', filename=f'daily_result_pic/{MyHash(qqid)}.png')
-                dstFp = gs_currentDir / "static" / "daily_result_pic" / f'{MyHash(qqid)}.png'
-                shutil.copy(srcFp, dstFp)
-                
-            return await render_template("result_page.html", daily_result_pic=webPath)
+            return await render_template("result_page.html")
     return await render_template("404.html", message="找不到该用户")
+
+
+@auto_pcr_web.route('/api/result', methods=['POST'])
+async def get_result_pic():
+    try:
+        data = await request.form
+        url_key = data.get('url_key')
+        assert(url_key and len(url_key) > 0), "别试了"
+    except:
+        return 'User not found', 404
+    dic = get_sec()
+    for qqid in dic:
+        config = dic[qqid]
+        if config.get('url_key', "") == url_key:        
+            image_path = gs_pcrSecretDir / "daily_result" / f'{qqid}.png'
+            if image_path.exists():
+                return await send_file(image_path.as_posix(), mimetype='image/png')
+            return 'Image not found', 404
+    return 'User not found', 404
+
 
 @auto_pcr_web.route('/config', methods=['GET'])
 async def config_page():
@@ -164,10 +181,7 @@ async def config_page():
     for qqid in dic:
         config = dic[qqid]
         if config.get('url_key', "") == url_key:
-            need_correct, msg = auto_correct(qqid)
-            if need_correct:
-                return await render_template("404.html", error_code=410, message=msg)
-            return await render_template("config_page.html", qqname=config.get('name', ""), qqid=qqid, pcrname=config.get('pcrname', ""), pcrid=config.get('pcrid', ""), config=dumps(config_with_comment(config["daily_config"]), ensure_ascii=False, indent=4))
+            return await render_template("config_page.html")
     return await render_template("404.html", message="找不到该用户")
 
 
@@ -200,7 +214,6 @@ async def login():
         save_sec(dic)
 
     return await make_response_json(200, f'/autopcr/config?url_key={dic[qqid]["url_key"]}')
-    
 
 
 @auto_pcr_web.route('/api/trigger_daily', methods=['POST'])
@@ -209,7 +222,7 @@ async def trigger_daily():
         data = await request.form
         qqid = data.get('qqid')
         url_key = data.get('url_key')
-        assert len(url_key) > 0, "别试了"
+        assert(url_key and len(url_key) > 0), "别试了"
     except:
         return await make_response_json(400, "请求格式错误")
     dic = get_sec()
@@ -230,7 +243,47 @@ async def trigger_daily():
             return await make_response_json(403, f'清日常模块异常终止：{e}')
     else:
         return await make_response_json(201, "已成功触发清日常。请过几分钟查询结果。")
+
+
+@auto_pcr_web.route('/api/config', methods=['POST'])
+async def get_config():
+    try:
+        data = await request.form
+        qqid = data.get('qqid')
+        url_key = data.get('url_key')
+        assert(url_key and len(url_key) > 0), "别试了"
+    except:
+        return await make_response_json(400, "请求格式错误")
+    dic = get_sec()
+    if qqid not in dic:
+        return await make_response_json(404, "用户不存在")
+    if dic[qqid]["url_key"] != url_key:
+        return await make_response_json(406, "校验失败")
     
+    need_correct, msg = auto_correct(qqid)
+    if need_correct:
+        return await make_response_json(410, msg) # 此为临时方案，应改为使用list    
+    #return await make_response_json(data=config_with_comment(dic[qqid]["daily_config"])) # dict不转成str的话在js会被自动排序
+    return await make_response_json(data=dumps(config_with_comment(dic[qqid]["daily_config"]), ensure_ascii=False)) # 此为临时方案，应改为使用list
+    
+    
+@auto_pcr_web.route('/api/userdata', methods=['POST'])
+async def get_userdata():
+    try:
+        data = await request.form
+        url_key = data.get('url_key')
+        assert(url_key and len(url_key) > 0), "别试了"
+    except:
+        return await make_response_json(400, "请求格式错误")
+    dic = get_sec()
+    qqids = [qqid for qqid in dic if "url_key" in dic[qqid] and dic[qqid]["url_key"] == url_key]
+    if not qqids:
+        return await make_response_json(406, "校验失败")
+    if len(qqids) > 1:
+        return await make_response_json(500, "内部错误：url_key重复")
+    qqid = qqids[0]
+    config = dic[qqid]
+    return await make_response_json(data={"qqid": qqid, "qqname": config.get('name', ""), "pcrname": config.get('pcrname', ""), "pcrid": config.get('pcrid', "")})
 
 @auto_pcr_web.route('/api/config', methods=['PUT'])
 async def update_config():

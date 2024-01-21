@@ -1,24 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>清日常结果</title>
     <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
 </head>
-
 <body>
-    <img id="myImage" src="" alt="">
+    <img id="myImage" src="" alt="Image loading...">
+    <div id="image-wrapper"></div>
 
     <script>
-        function loadImage() {
-            var timestamp = new Date().getTime();
-            var imageUrl = "{{ daily_result_pic }}?ts=" + timestamp;
-            $("#myImage").attr("src", imageUrl);
-        }
-        loadImage();
+        $(document).ready(function() {
+            $.ajax({
+                url: '/autopcr/api/result',
+                method: 'POST',
+                data: {"url_key": window.location.search.substring(9)},
+                success: function(data, status, xhr) {
+                    var blob = new Blob([data], {type: xhr.getResponseHeader('Content-Type')});
+                    var url = window.URL.createObjectURL(blob);
+                    $("#myImage").attr("src", url);
+                },
+                error: function(xhr, error) {
+                    $('#image-wrapper').text('无法加载图片');
+                    $('#myImage').hide();
+                },
+                xhrFields: {
+                    responseType: 'blob'
+                }
+            });
+        });
     </script>
 </body>
-
 </html>

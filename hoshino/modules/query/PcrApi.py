@@ -122,8 +122,7 @@ class PcrApi:
     
     async def GetLoadIndexRaw(self) -> dict:
         res = await self.CallApi("/load/index", {'carrier': 'OPPO'})
-        self._record.pcrname_cache = res["user_info"]["user_name"]
-        self._record.save()
+        PcrAccountInfo.update(pcrname_cache=res["user_info"]["user_name"]).where(PcrAccountInfo.pcrid == self.Pcrid).execute()
         return res
 
 
@@ -157,12 +156,191 @@ class PcrApi:
         return res
 
 
-    async def GetProfile(self, target_viewer_id: int) -> dict:
+    async def GetProfileRaw(self, target_viewer_id: int) -> dict:
         """
         Raises:
             PcrApiException
         """
         return await self.CallApi("/profile/get_profile", {"target_viewer_id": target_viewer_id})
+
+
+    class UserInfo(BaseModel):
+        viewer_id: int
+        user_name: str
+        user_comment: str
+        team_level: int
+        team_exp: int
+        emblem: 'PcrApi.Emblem'
+        last_login_time: int
+        arena_rank: int
+        arena_group: int
+        arena_time: int
+        grand_arena_rank: int
+        grand_arena_group: int
+        grand_arena_time: int
+        open_story_num: int
+        unit_num: int
+        total_power: int
+        tower_cleared_floor_num: int
+        tower_cleared_ex_quest_count: int
+        friend_num: int
+
+    class ProfileResponse(BaseModel):
+        user_info: 'PcrApi.UserInfo'
+        quest_info: Dict
+        clan_name: str
+        clan_battle_id: int
+        clan_battle_mode: int
+        clan_battle_own_score: int
+        friend_support_units: List[Dict]
+        clan_support_units: List[Dict]
+    
+    async def GetProfile(self, target_viewer_id: int) -> ProfileResponse:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = await self.GetProfileRaw(target_viewer_id)
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+        res = PcrApi.ProfileResponse(**res)
+        PcrAccountInfo.update(pcrname_cache=res.user_info.user_name).where(PcrAccountInfo.pcrid == target_viewer_id).execute()
+        return res
+
+
+    async def Rename(self, new_name: str) -> None:
+        """
+        Raises:
+            PcrApiException
+        """
+        await self.CallApi("/profile/rename", {"user_name": new_name}) # returns None
+        PcrAccountInfo.update(pcrname_cache=new_name).where(PcrAccountInfo.pcrid == self.Pcrid).execute()
+
+
+    @staticmethod
+    def _UpdateClanInfoStatic(clan_info: dict) -> None:
+        if clan_info.get("clan", {}).get("detail", {}).get("clan_id", None) is None:
+            return;
+        clan_detail = clan_info["clan"]["detail"]
+        clan_id = clan_detail["clan_id"]
+        
+        existing_clan: ClanInfo = ClanInfo.get_or_none(ClanInfo.clanid == clan_id)
+        if existing_clan is not None and \
+        existing_clan.clan_name_cache == clan_detail["clan_name"] and \
+        existing_clan.clan_member_count_cache == clan_detail["member_num"] and \
+        existing_clan.leader_pcrid_cache == clan_detail["leader_viewer_id"]:
+            ...
+        else:
+            ClanInfo.delete().where(ClanInfo.clanid == clan_id).execute()
+            ClanInfo.create(
+                clanid=clan_id,
+                clan_name_cache=clan_detail["clan_name"],
+                clan_member_count_cache=clan_detail["member_num"],
+                leader_pcrid_cache=clan_detail["leader_viewer_id"])
+
+
+    async def UpdateClanDatabase(self) -> dict:
+        """
+        Raises:
+            PcrApiException
+        """
+        return await self.GetClanInfoRaw()
+
+
+    async def GetClanInfoRaw(self) -> dict:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = await self.CallApi("/clan/info", {"clan_id": 0, "get_user_equip": 0}) # 别动，就是0
+        
+        self._UpdateClanInfoStatic(res)
+        try:
+            clan_id = res["clan"]["detail"]["clan_id"]
+            FarmInfo.update(clanid_cache=clan_id).where(FarmInfo.pcrid == self.Pcrid).execute()
+            FarmBind.update(permitted_clanid=clan_id).where(FarmBind.pcrid == self.Pcrid).execute()
+        except Exception as e:
+            print_exc()
+        
+        return res
+    
+    class Emblem(BaseModel):
+        emblem_id: int
+        ex_value: int
+
+    class SkinData(BaseModel):
+        icon_skin_id: int
+        sd_skin_id: int
+        still_skin_id: int
+        motion_id: int
+
+    class FavoriteUnit(BaseModel):
+        id: int
+        unit_rarity: int
+        battle_rarity: int
+        unit_level: int
+        promotion_level: int
+        exceed_stage: int
+        skin_data: 'PcrApi.SkinData'
+    
+    class ClanDetail(BaseModel):
+        clan_id: int
+        leader_name: str
+        leader_viewer_id: int
+        clan_name: str
+        description: str
+        join_condition: int
+        activity: int
+        clan_battle_mode: int
+        member_num: int
+    
+    class ClanMember(BaseModel):
+        viewer_id: int
+        name: str
+        emblem: 'PcrApi.Emblem'
+        level: int
+        role: int
+        favorite_unit: 'PcrApi.FavoriteUnit'
+        last_login_time: int
+        total_power: int
+
+    class _Clan(BaseModel):
+        detail: 'PcrApi.ClanDetail'
+        members: List['PcrApi.ClanMember']
+
+    class ClanInfo(BaseModel):
+        have_join_request: int
+        clan: 'PcrApi._Clan'
+        clan_status: int
+        current_period_ranking: int
+        last_total_ranking: int
+        grade_rank: int
+        current_clan_battle_mode: int
+        last_clan_battle_mode: int
+        current_battle_joined: int
+        last_battle_joined: int
+        clan_point: int
+        remaining_count: int
+        unread_liked_count: int
+
+    async def GetClanInfo(self) -> ClanInfo:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = await self.GetClanInfoRaw()
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+        return PcrApi.ClanInfo(**res)
+
+
+    async def GetClanId(self) -> int:
+        """
+        Raises:
+            PcrApiException
+            AssertionError
+        """
+        res = await self.GetClanInfoRaw()
+        assert res.get("clan", {}).get("detail", {}).get("clan_id", None) is not None, 'No ["clan"]["detail"]["clan_id"] field in response.'
+        return res["clan"]["detail"]["clan_id"]
     
     
     class ClanInviteRequest(BaseModel):
@@ -174,13 +352,51 @@ class PcrApi:
                 invited_viewer_id=invited_viewer_id,
                 invite_message=invite_message)
 
+
     async def ClanInvite(self, request: ClanInviteRequest) -> None:
         """
+        邀请某人加入自己的公会
+        self 应为会长
+        
         Raises:
             PcrApiException
         """
-        await self.CallApi("/clan/invite", request.model_dump_json())
-        # TODO 更新数据库
+        await self.CallApi("/clan/invite", request.model_dump_json()) # returns None
+
+
+    async def CancelClanInvite(self, invite_id: int) -> None:
+        """
+        取消自己曾经发起的 将某人加入自己的公会的邀请
+        self 应为会长
+        
+        Raises:
+            PcrApiException
+        """
+        await self.CallApi("/clan/cancel_invite", {"invite_id": invite_id}) # returns None
+
+
+    class InviteUserResponse(BaseModel):
+        invite_id: int = Field(...)
+        viewer_id: int = Field(...)
+        create_time: str = Field(...) # "2024-05-03 16:30:08",
+        update_time: str = Field(...) # "2024-05-03 16:30:08",
+        user_name: str = Field(...)
+        emblem: 'PcrApi.Emblem'
+        favorite_unit: 'PcrApi.FavoriteUnit'
+        team_level: int
+        user_last_login_time: int # 1714724966
+    
+    async def GetClanInviteUserList(self, clan_id: int) -> List[InviteUserResponse]:
+        """
+        获取自己发起的 邀请他人加入自己公会的邀请
+        self 应为会长
+        
+        Raises:
+            PcrApiException
+        """
+        res = await self.CallApi("/clan/invite_user_list", {"clan_id": clan_id, "page": 0, "oldest_time": 0})
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+        return [PcrApi.InviteUserResponse(**clan) for clan in res.get("list", [])]
     
     
     class InvitedClanResponse(BaseModel):
@@ -200,6 +416,8 @@ class PcrApi:
         
     async def GetInvitedClans(self) -> List[InvitedClanResponse]:
         """
+        获取其他会长向你发起的加入公会的邀请
+        
         Raises:
             PcrApiException
         """
@@ -208,21 +426,72 @@ class PcrApi:
             return []
         res = await self.CallApi("/clan/invited_clan_list", {"page": 0})
         res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
-        return [PcrApi.InvitedClanResponse(**clan) for clan in res['list']]
+        return [PcrApi.InvitedClanResponse(**clan) for clan in res.get("list", [])]
         
     async def AcceptClanInvite(self, clan_id: int) -> None:
+        """
+        同意其他会长发起的加入公会的邀请
+
+        Raises:
+            PcrApiException
+        """
+        _ = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 真实API触发顺序
+        _ = await self.CallApi("/clan/join", {"clan_id": clan_id, "from_invite": 1})
+        await self.UpdateClanDatabase()
+        
+    async def ApplyForClan(self, clan_id: int) -> None:
+        """
+        申请加入一个公会。
+        （可能需要审核，也可能不需要。都是这个API和data）
+        
+        Raises:
+            PcrApiException
+        """
+        _ = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 真实API触发顺序
+        _ = await self.CallApi("/clan/join", {"clan_id": clan_id, "from_invite": 0})
+
+
+    class ClanJoinRequestResponse(BaseModel):
+        viewer_id: int = Field(...)
+        name: str = Field(...)
+        emblem: 'PcrApi.Emblem'
+        level: int = Field(...)
+        comment: str = Field(...)
+        favorite_unit: 'PcrApi.FavoriteUnit'
+        
+    async def GetClanJoinRequestList(self, clan_id: int) -> List[ClanJoinRequestResponse]:
+        """
+        获取申请加入自己公会的人的列表
+        self 应为会长
+        
+        Raises:
+            PcrApiException
+        """
+        res = await self.CallApi("/clan/join_request_list", {"clan_id": clan_id, "page": 0, "oldest_time": 0})
+        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+        return [PcrApi.ClanJoinRequestResponse(**clan) for clan in res.get("list", [])]
+
+    async def RejectClanJoinRequest(self, clan_id: int, applicant_pcrid: int) -> None:
+        """
+        拒绝他人发起的加入自己公会的申请
+        self 应为会长
+        
+        Raises:
+            PcrApiException
+        """
+        _ = await self.CallApi("/clan/join_request_reject", {"request_viewer_id": applicant_pcrid, "clan_id": clan_id}) # returns None
+
+
+    async def RemoveFromClan(self, member_pcrid: int) -> None:
         """
         Raises:
             PcrApiException
         """
-        others_info = await self.CallApi("/clan/others_info", {"clan_id": clan_id}) # 真实API触发顺序
-        res = await self.CallApi("/clan/join", {"clan_id": clan_id, "from_invite": 1})
-        FarmInfo.update(clanid_cache=clan_id).where(FarmInfo.pcrid == self.Pcrid).execute()
-        try:
-            ClanInfo.update(clan_member_count_cache=1 + others_info["clan"]["detail"]["member_num"]).where(ClanInfo.clanid == clan_id).execute()
-            ClanInfo.update(clan_name_cache=others_info["clan"]["detail"]["clan_name"]).where(ClanInfo.clanid == clan_id).execute()
-        except Exception as e:
-            pass
+        _ = await self.CallApi("/clan/remove", {"clan_id": await self.GetClanId(), "remove_viewer_id": member_pcrid}) # returns None
+        await self.UpdateClanDatabase()
+        FarmInfo.update(clanid_cache=0).where(FarmInfo.pcrid == member_pcrid).execute()
+        FarmBind.update(permitted_clanid=0).where(FarmBind.pcrid == member_pcrid).execute()
+        
     
     class CharaLoveInfoResponse(BaseModel):
         chara_id: int = Field(..., description="角色的4位ID")
@@ -284,7 +553,8 @@ class PcrApi:
         res = (await self.GetLoadIndexRaw()).get("unit_list", [])
         res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.UnitInfoResponse(**x) for x in res]
-    
+
+
     async def GetUnitInfo(self, chara_id: int) -> UnitInfoResponse:
         """
         Args:

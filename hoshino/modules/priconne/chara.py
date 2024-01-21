@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 from io import BytesIO
+from typing import List
 
 import pygtrie
 from fuzzywuzzy import process
@@ -54,6 +55,19 @@ class Roster:
         """@return: id, name, score"""
         name, score = process.extractOne(name, self._roster.keys(), processor=util.normalize_str)
         return self._roster[name], name, score
+    
+    def guess_ids(self, name, threshold = 60, limit = 8):
+        """@return: List[id, name, score]"""
+        matches = process.extractBests(name, self._roster.keys(), processor=util.normalize_str, score_cutoff=threshold, limit=limit)
+        match_ids = set()
+        outputs = []
+        for name, score in matches:
+            id_ = self._roster[name]
+            if id_ in match_ids:
+                continue
+            match_ids.add(id_)
+            outputs.append((id_, name, score))
+        return outputs
 
     def parse_team(self, namestr):
         """@return: List[ids], unknown_namestr"""
@@ -91,6 +105,11 @@ def fromname(name, star=0, equip=0):
 def guess_id(name):
     """@return: id, name, score"""
     return roster.guess_id(name)
+
+
+def guess_ids(name, threshold = 60, limit = 8):
+    """@return: List[id, name, score]"""
+    return roster.guess_ids(name, threshold, limit)
 
 
 def is_npc(id_):
@@ -140,6 +159,10 @@ class Chara:
     @property
     def name(self):
         return _pcr_data.CHARA_NAME[self.id][0] if self.id in _pcr_data.CHARA_NAME else _pcr_data.CHARA_NAME[UNKNOWN][0]
+    
+    @property
+    def names(self) -> List[str]:
+        return _pcr_data.CHARA_NAME.get(self.id, _pcr_data.CHARA_NAME.get(UNKNOWN, ["Unknown"]))
 
     @property
     def is_npc(self) -> bool:
@@ -267,6 +290,29 @@ async def download_star6_chara_icon(sess: CommandSession):
             res = R.img(f'priconne/unit/icon_unit_{id_}61.png')
             if not res.exist:
                 tasks.append(download_chara_icon(id_, 6))
+        ret = await asyncio.gather(*tasks)
+        succ = sum(r == 0 for r in ret)
+        await sess.send(f'ok! downloaded {succ}/{len(ret)} icons.')
+    except Exception as e:
+        logger.exception(e)
+        await sess.send(f'Error: {type(e)}')
+
+@sucmd('update-star13-chara-icon', force_private=False, aliases=('更新头像'))
+async def download_star6_chara_icon(sess: CommandSession):
+    '''
+    尝试下载缺失的1、3星头像，已有头像不会被覆盖
+    '''
+    try:
+        tasks = []
+        for id_ in _pcr_data.CHARA_NAME:
+            if is_npc(id_):
+                continue
+            res = R.img(f'priconne/unit/icon_unit_{id_}11.png')
+            if not res.exist:
+                tasks.append(download_chara_icon(id_, 1))
+            res = R.img(f'priconne/unit/icon_unit_{id_}31.png')
+            if not res.exist:
+                tasks.append(download_chara_icon(id_, 3))
         ret = await asyncio.gather(*tasks)
         succ = sum(r == 0 for r in ret)
         await sess.send(f'ok! downloaded {succ}/{len(ret)} icons.')

@@ -30,6 +30,14 @@
 
 清日常模块于2022年初开始，最初功能为刷取心碎和星球杯的300体，以便早班刀手代刀。随后逐渐扩充出账号管理，box管理，以及完整的清日常功能。由于作者编程水平很菜，该模块中的`priconne/pcr_secert`, `priconne/myweb`, `autobox`部分代码未遵循任何python开发规范，且已堆成“屎山”，即使作者难以阅读、修改，将逐渐重构。
 
+## 关于清日常结果图片渲染问题
+（视`dataframe_image`三方库的版本），其中可能有平台特定的代码。对于 Windows 用户，请检查：`dataframe_image\_screenshot.py`中是否有：
+```python
+if os.geteuid() == 0:
+    args.append("--no-sandbox")
+```
+如有（类似）这样的代码，请注释掉。
+
 ## 解决`matplotlib`模块的中文渲染问题
 1. 通过运行以下代码来获取路径。路径应形如：`...\Lib\site-packages\matplotlib\mpl-data\matplotlibrc`。
 ```

@@ -5,6 +5,8 @@ from nonebot import permission as perm
 from nonebot.argparse import ArgumentParser
 
 from hoshino import Service, priv, util
+from hoshino.config import NICKNAME
+gs_nickname = NICKNAME if type(NICKNAME) == str else NICKNAME[0]
 
 PRIV_TIP = f'群主={priv.OWNER} 群管={priv.ADMIN} 群员={priv.NORMAL} bot维护组={priv.SUPERUSER}'
 
@@ -36,12 +38,33 @@ async def lssv(session: CommandSession):
             msg.append(f"|{x}| {sv.name}")
     await session.send('\n'.join(msg))
 
-
 @on_command('enable', aliases=('启用', '开启', '打开'), permission=perm.GROUP, only_to_me=False)
+async def enable_service_notification(session: CommandSession):
+    names = session.current_arg_text.split()
+    if not names:
+        session.finish(f'向{gs_nickname}启用服务时请加上#前缀', at_sender=True)
+        
+    svs = Service.get_loaded_services()
+    for name in names:
+        if name in svs:    
+            session.finish(f'向{gs_nickname}启用服务时请加上#前缀。例：\n#enable {" ".join(names)}', at_sender=True)
+            
+@on_command('disable', aliases=('禁用', '关闭'), permission=perm.GROUP, only_to_me=False)
+async def disable_service_notification(session: CommandSession):
+    names = session.current_arg_text.split()
+    if not names:
+        session.finish(f'向{gs_nickname}禁用服务时请加上#前缀', at_sender=True)
+        
+    svs = Service.get_loaded_services()
+    for name in names:
+        if name in svs:    
+            session.finish(f'向{gs_nickname}禁用服务时请加上#前缀。例：\n#disable {" ".join(names)}', at_sender=True)
+    
+@on_command('#enable', aliases=('#启用', '#开启', '#打开'), permission=perm.GROUP, only_to_me=False)
 async def enable_service(session: CommandSession):
     await switch_service(session, turn_on=True)
 
-@on_command('disable', aliases=('禁用', '关闭'), permission=perm.GROUP, only_to_me=False)
+@on_command('#disable', aliases=('#禁用', '#关闭'), permission=perm.GROUP, only_to_me=False)
 async def disable_service(session: CommandSession):
     await switch_service(session, turn_on=False)
 

@@ -1,2 +1,4 @@
 __pycache__/
-data/account.json
+
+/data/*
+!/data/account.json.example

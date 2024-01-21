@@ -61,7 +61,7 @@ async def EllyeAutoCaptchaVerifier():
     
     try:
         async with httpx.AsyncClient() as client:
-            url = f'https://:{gs_ellye_token}@pcr-bilibili-api.cn.linepro6.com:843/geetest-captcha/validate'
+            url = f'https://:{gs_ellye_token}@captcha-api.bot.hwmoe.com/geetest-captcha/validate'
             response = await client.get(url, timeout=60)
             response.raise_for_status()
             res = response.json()

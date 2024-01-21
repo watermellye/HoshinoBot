@@ -39,30 +39,27 @@ sv_help_all = '''
 [#刷图推荐]
 [删除账号]
 
-[查box] bot会登录您的账号以获取您的详细box至数据库
-[查角色] 发这条指令试试就知道怎么用了
 [#上[地下城|公会|关卡]支援@<somebody> 角色]
 '''.strip()
 
 sv_help_group_manager = '''
-[发号<@号><@代刀人>]
-[更新状态<@号><状态>]  状态: 1/正常 2/错误 3/未交号
-[更新密码<qq号> <密码>]  私聊edq使用哟
-[导出账号]
 '''.strip()
 
 sv_help_bot_superuser = '''
-[账号校验 @号]
-[账号批量校验] 检测在密码本中且在本群中的成员的账号，设置状态并保存box。若不可登录，提示号主。
-[导出box]
-[催交号] 向状态记录为2和3的账号号主发送更改密码消息
-[加入密码本 <@号>+]
+临时允许清日常
+临时关闭清日常
+开启定时清日常
+关闭定时清日常
+清活动扫荡券
+触发定时买药
+触发定时清日常
+查询清日常队列
 '''.strip()
 
 sv = Service('AutoPcr', visible=False)
 
 friendnum = []
-g_doDailyQueue: Set[str] = set()
+g_doDailyQueue: Dict[str, int] = {}
 admin_qqid_int = 981082801
 uri = "https://bot.ellye.cn"
 if uri.endswith(r'/'):
@@ -78,7 +75,12 @@ curpath = dirname(__file__)
 # 账号/密码缺失则为空
 sec = join(curpath, 'secret.json')
 IOLock = threading.Lock()
-   
+
+gs_semaphore_count = 4
+user_pcr_daily_semaphore = asyncio.Semaphore(gs_semaphore_count * 2)
+
+gs_allow_do_daily = True
+    
 
 @sv.on_fullmatch(("pcr帮助", "PCR帮助"))
 async def send_help(bot: HoshinoBot, ev: CQEvent):
@@ -136,19 +138,11 @@ def get_sec() -> dict:
                     a = line.split('\t')
                     if len(a) == 1 and len(line.split(' ') > 1):
                         a = line.split(' ')
-                    if len(a) == 5:
+                    if len(a) == 4:
                         dic[a[0]] = {
                             "name": a[1],
                             "account": a[2],
-                            "password": a[3],
-                            "status": a[4]
-                        }
-                    if len(a) == 3:
-                        dic[a[0]] = {
-                            "name": a[1],
-                            "account": "",
-                            "password": "",
-                            "status": "3"
+                            "password": a[3]
                         }
             save_sec(dic)
 
@@ -178,184 +172,21 @@ def getSecret(qqid: Union[str, int, None] = None) -> Dict[str, str]:
         return {"status": False}
 
 
-async def sendHao(bot, ev, xx, yy):
-    # 把xx的号发给yy
-    result = [xx, yy]
-    dic = get_sec()
-    if str(result[0]) not in dic:
-        await bot.finish(ev, f"[CQ:at,qq={result[0]}]的账号状态为 无记录")
-    else:
-        info = dic[str(result[0])]
-        # 状态 1/正常 2/错误 3/未交号
-        if info["status"] in [
-                3, '3', "未交号"
-        ] or info["account"] == "" or info["password"] == "":
-            await bot.finish(ev, f"[CQ:at,qq={result[0]}]的账号状态为 未交号！")
-        if info["status"] in [2, '2', "错误"]:
-            await bot.finish(ev, f"[CQ:at,qq={result[0]}]的账号状态为 错误！")
-        if info["status"] in [1, '1', "正常"]:
-            msg = info.get("name", str(xx)) + '\n' + info["account"] + '\n' + info["password"]
-            if "pcrid" in info:
-                appendmsg = ""
-                try:
-                    if "last_get_account_member" in info:
-                        qid = info["last_get_account_member"]
-                        tim = info["last_get_account_time"]
-                        appendmsg += f'\n该号最后记录于 {tim} 发给 {dic.get(str(qid),{}).get("name", qid)}'
-                    info["last_get_account_member"] = str(yy)
-                    info["last_get_account_time"] = datetime.datetime.now().strftime("%m-%d %H:%M")
-                    save_sec(dic)
-                except:
-                    pass
-                try:
-                    res = await query.query({"account": "zcm36857", "password": "013460"}, '/profile/get_profile', {'target_viewer_id': int(info["pcrid"])})
-                    timestamp = res["user_info"]["last_login_time"]
-                    timestr = time.strftime("%m-%d %H:%M", time.localtime(timestamp))
-                    appendmsg += f'\n该号最后登录于 {timestr}'
-                except:
-                    pass
-                try:
-                    from ...daidao import daidao
-                    dat = await daidao.get_yobot_data(ev.group_id)
-                    chudao = dat["challenges"]
-                    for record in reversed(chudao):
-                        if record["qqid"] == int(xx):
-                            timestr = time.strftime("%m-%d %H:%M", time.localtime(record["challenge_time"]))
-                            appendmsg += f'\n该号最后出刀于 {timestr} 向 boss{record["cycle"]}-{record["boss_num"]} ({record["damage"]//10000}w{" 补偿刀" if record["is_continue"] else ""}{" 尾刀" if record["health_ramain"] == 0 else ""})'
-                            break
-                    # print(dat)
-                except:
-                    pass
-                await bot.send(ev, f'{info.get("name", str(xx))}' + appendmsg)
-            friendnum = await get_friends()
-            if int(result[1]) not in friendnum:
-                await bot.send(ev, f"Warning: [CQ:at,qq={result[1]}]非edq好友，账号信息发送可能不成功。")
-            if int(result[0]) not in friendnum:
-                await bot.send(ev, f"Warning: [CQ:at,qq={result[0]}]非edq好友，代刀提醒发送可能不成功。")
-
-            try:
-                await bot.send_private_msg(
-                    user_id=result[0],
-                    message=f'您好~代刀手{result[1]}正在为您代刀，请勿登录！')
-            except:
-                pass
-            try:
-                await bot.send_private_msg(user_id=result[1], message=msg + appendmsg)
-            except:
-                pass
-            if str(result[1]) != str(ev.user_id):
-                msg = "发号抄送：\n" + msg
-                await bot.send_private_msg(user_id=ev.user_id, message=msg + appendmsg)
-
-
-lingHao = True
-
-
-@sv.on_prefix(("允许领号"))
-async def 允许领号(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    global lingHao
-    lingHao = True
-    await bot.finish(ev, f"Succeed")
-
-
-@sv.on_prefix(("禁止领号"))
-async def 禁止领号(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    global lingHao
-    lingHao = False
-    await bot.finish(ev, f"Succeed")
-
-
-@sv.on_prefix(("领号"))
-# 领号<@号>
-async def 领号(bot, ev):
-    global lingHao
-    print(lingHao)
-    dic = get_sec()
-    if lingHao == False:
-        return
-    if str(ev.user_id) not in dic:
-        return
-    ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
-    result = ret.findall(str(ev.message))
-    print(result)
-    if len(result) == 2:
-        if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id not in group_manager):
-            await bot.finish(ev, f"领号仅可将号发给自己！\n例：领号@某人")
-        else:
-            await 发号(bot, ev)
-    if len(result) == 1:
-        await sendHao(bot, ev, str(result[0]), str(ev.user_id))
-
-
-@sv.on_prefix(("发号"))
-# 发号<@号><@代刀人>
-async def 发号(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id not in group_manager):
-        return
-    ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
-    result = ret.findall(str(ev.message))
-    print(result)
-    if len(result) == 2:
-        await sendHao(bot, ev, str(result[0]), str(result[1]))
-
-
-@sv.on_prefix(("更新状态"))
-# 更新状态<@号><状态>
-async def 更新状态(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id not in group_manager):
-        return
-    dic = get_sec()
-    ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
-    result = ret.findall(str(ev.message))
-    msg = ev.message.extract_plain_text().strip()
-    friendnum = await get_friends()
-    if len(result) == 1 and msg != "":
-        if str(result[0]) not in dic or "account" not in dic[str(result[0])]:
-            dic[str(result[0])] = {}
-            dic[str(result[0])]["status"] = "3"
-            await bot.send(ev, f"[CQ:at,qq={result[0]}]的账号状态为 无记录")
-            if int(result[0]) not in friendnum:
-                await bot.send(
-                    ev, f"Warning: [CQ:at,qq={result[0]}]非edq好友，账号信息发送可能不成功。")
-            else:
-                await bot.send_private_msg(
-                    user_id=result[0],
-                    message="请直接在此聊天框交号。指令：\npcr 账号 密码")
-        elif msg in ['3', "未交号"]:
-            dic[str(result[0])]["status"] = "3"
-            await bot.send(ev, f"[CQ:at,qq={result[0]}]的账号状态已置为 未交号")
-        elif msg in ['2', "错误", "密码错误", "密码错", "登不上"]:
-            dic[str(result[0])]["status"] = "2"
-            await bot.send(ev, f"[CQ:at,qq={result[0]}]的账号状态已置为 错误")
-            await bot.send_private_msg(
-                user_id=result[0],
-                message="您的pcr账号状态被置为 错误\n请修改密码后将新密码通过以下指令更新：\n更新密码<密码>")
-            if int(result[0]) not in friendnum:
-                await bot.send(
-                    ev, f"Warning: [CQ:at,qq={result[0]}]非edq好友，账号信息发送可能不成功。")
-        elif msg in ['1', "正常", "正确", "密码正确"]:
-            dic[str(result[0])]["status"] = "1"
-            await bot.send(ev, f"[CQ:at,qq={result[0]}]的账号状态已置为 正常")
-        save_sec(dic)
-
-
 @sv.on_fullmatch(("删除账号"))
 async def 删除账号确认(bot, ev):
-    if ev.group_id:
-        await bot.finish(ev, "请私聊使用本功能")
+    # if ev.group_id:
+    #     await bot.finish(ev, "请私聊使用本功能")
     dic = get_sec()
     qqid = str(ev.user_id)
     if qqid not in dic:
         await bot.finish(ev, "无记录")
     config = dic[qqid]
-    await bot.finish(ev, f'您的pcr信息为：pcrname={config.get("pcrname", "Unknown")}\npcrid={config.get("pcrid", "Unknown")}\naccount={config.get("account", "Unknown")}\npassword={config.get("password", "Unknown")}\n删除账号将同时清除清日常设置\n若确认，请发送"#删除账号"')
+    await bot.finish(ev, f'您的pcr信息为：pcrname={config.get("pcrname", "Unknown")}\npcrid={config.get("pcrid", "Unknown")}\n删除账号将同时清除清日常设置\n若确认，请发送"#删除账号"')
+    # config = dic[qqid]
+    # await bot.finish(ev, f'您的pcr信息为：pcrname={config.get("pcrname", "Unknown")}\npcrid={config.get("pcrid", "Unknown")}\naccount={config.get("account", "Unknown")}\npassword={config.get("password", "Unknown")}\n删除账号将同时清除清日常设置\n若确认，请发送"#删除账号"')
 
 
-@sv.on_fullmatch(("#删除账号"))
+@sv.on_fullmatch(("#删除账号", "＃删除账号"))
 async def 删除账号(bot, ev):
     dic = get_sec()
     qqid = str(ev.user_id)
@@ -364,46 +195,6 @@ async def 删除账号(bot, ev):
     dic.pop(qqid)
     save_sec(dic)
     await bot.finish(ev, "删除成功")
-
-
-@sv.on_prefix(("更新密码"))
-# 更新密码<qq号> <密码>
-async def 更新密码(bot, ev):
-    if ev.group_id:
-        await bot.finish(ev, "请私聊使用本功能")
-    msg = ev.message.extract_plain_text().strip().split(' ')
-    dic = get_sec()
-    if len(msg) == 1:
-        msg = [str(ev.user_id), msg[0]]
-        msg[1] = msg[1].replace('"', '')
-        if msg[0] not in dic:
-            await bot.finish(ev, f"{msg[0]}的账号状态为 无记录")
-        dic[msg[0]]["password"] = msg[1]
-        if dic[msg[0]]["account"] == "":
-            await bot.send(ev, f"Warning: {msg[0]}的账号名无记录")
-        else:
-            dic[msg[0]]["status"] = "1"
-        dic[msg[0]]["updatetime"] = str(datetime.datetime.now())
-        save_sec(dic)
-        await bot.finish(ev, f"{msg[0]}的密码已更新")
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id not in group_manager):
-        return
-    if len(msg) == 2:
-        msg[1] = msg[1].replace('"', '')
-        if msg[0] not in dic:
-            await bot.finish(ev, f"{msg[0]}的账号状态为 无记录")
-        dic[msg[0]]["password"] = msg[1]
-        if dic[msg[0]]["account"] == "":
-            await bot.send(ev, f"Warning: {msg[0]}的账号名无记录")
-        else:
-            await _account_verify(
-                bot, ev, msg[0], {
-                    "account": dic[msg[0]]["account"],
-                    "password": dic[msg[0]]["password"]
-                }, sendCaptcha=ev.user_id)
-        dic[msg[0]]["updatetime"] = str(datetime.datetime.now())
-        save_sec(dic)
-        await bot.finish(ev, f"{msg[0]}的密码已更新")
 
 
 @sv.on_prefix(("pcr"))
@@ -415,47 +206,43 @@ async def 上传账号(bot, ev):
     
 @sv.on_prefix(("#pcr"))
 async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
-    msg = ev.message.extract_plain_text().strip().split()
+    msg = [m[1:-1] if m.startswith('<') and m.endswith('>') else m for m in ev.message.extract_plain_text().strip().split()]
+    if len(msg) != 2:
+        bot.finish(ev, f"参数数量错误：期望 {2} 个参数，您输入了 {len(msg)} 个\n请输入[#pcr 账号 密码]。举例：\n#pcr zhanghao pwd1234abcd")
+
+    qqstr = str(ev.user_id)
+    nam = ev.get("sender", {}).get("nickname", str(ev.user_id))
+    account = msg[0]
+    password = msg[1]
+    
+    await bot.send(ev, f'收到[{nam}]({qqstr})的PCR账号上传或更新请求\naccount=[{account}]\npassword=[{password}]')
+    if not (all(ord(c) < 256 for c in account) and all(ord(c) < 256 for c in password)):
+        bot.finish(ev, "参数格式错误：账号或密码包含非基础字符")
+
     dic = get_sec()
-
-    if len(msg) not in [2, 3]:
-        await bot.finish(ev, f"请输入\npcr 账号 密码\n中间用空格分隔。")
-    qqid = str(ev.user_id)
-    st = "更新"
-    if str(qqid) not in dic:
-        dic[qqid] = {}
-        st = "获取"
-    nam = str(qqid)
-    try:
-        nam = ev["sender"]["nickname"]
-    except:
-        pass
-    for i in range(len(msg)):
-        msg[i] = msg[i].replace('"', '')
-        if msg[i][0] == '<' and msg[i][-1] == '>':
-            msg[i] = msg[i][1:-1]
-    dic[qqid]["name"] = nam
-    dic[qqid]["account"] = msg[0]
-    dic[qqid]["password"] = msg[1]
-    dic[qqid]["updatetime"] = str(datetime.datetime.now())
-    dic[qqid]["status"] = "1"
-
-    from ...autobox import _get_info
-    info = await _get_info({"account": msg[0], "password": msg[1], "qqid": int(qqid)})
-    if info["status"] == True:
-        _info = info["message"]
-        dic[qqid]["pcrname"] = _info["pcrname"]
-        dic[qqid]["pcrid"] = _info["pcrid"]
-        await bot.send(ev, f'{qqid}的记录已{st}并校验通过\nname={nam}\naccount={msg[0]}\npcrname={dic[qqid]["pcrname"]}\npcrid={dic[qqid]["pcrid"]}')
-    else:
-        if "请联系管理员" not in info["message"]:
-            dic[qqid]["status"] = "2"
-            await bot.send(ev, f'{qqid}的记录已{st}\nname={nam}\naccount={msg[0]}\n账号密码检验不通过：{info["message"]}，已置为错误。')
-        else:
-            await bot.send(ev, f'{qqid}的记录已{st}\nname={nam}\naccount={msg[0]}\n账号暂未校验。')
-            await bot.send_private_msg(user_id=admin_qqid_int, message=f'{qqid}的记录:\nname={nam}\naccount={msg[0]}\npassword={msg[1]}\n账号校验时异常：{info["message"]}')
-
+    if str(qqstr) not in dic:
+        dic[qqstr] = {}
+    dic[qqstr]["name"] = nam
+    dic[qqstr]["account"] = account
+    dic[qqstr]["password"] = password
+    dic[qqstr]["updatetime"] = str(datetime.datetime.now())
     save_sec(dic)
+    
+    await bot.send(ev, f'账密已写入数据库，正在登录')
+
+    pcrClient = PcrApi(dic[qqstr])
+    try:
+        await pcrClient.Login(True)
+        pcrname = await pcrClient.GetUsername()
+        pcrid = await pcrClient.GetPcrid()
+    except Exception as e:
+        bot.finish(ev, f'账号登录失败，已置为错误状态，无法进行清日常\n原始报错：{e}')
+    else:
+        dic = get_sec()
+        dic[qqstr]["pcrname"] = pcrname
+        dic[qqstr]["pcrid"] = pcrid
+        save_sec(dic)
+        await bot.send(ev, f'账号登录成功\npcrname=[{pcrname}]\npcrid=[{pcrid}]\n可以进行清日常设置和清日常啦')
 
 
 @sv.on_prefix(("更新账号"))
@@ -479,25 +266,6 @@ async def 更新账号(bot, ev):
         await bot.finish(ev, f"[CQ:at,qq={result[0]}]的账号名已更新")
 
 
-@sv.on_fullmatch(("导出账号"))
-async def 导出账号(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id
-                                                      not in group_manager):
-        return
-    group_member_qqid_list = await get_group_member_qqid_list(bot, ev)
-    dic = get_sec()
-    msg = ""
-    for i in dic:  # qqid
-        if group_member_qqid_list != [] and str(i) not in group_member_qqid_list:
-            continue
-        if 'name' in dic[i]:
-            msg += f"{i}\t{dic[i]['name']}\t{dic[i]['account']}\t{dic[i]['password']}\n"
-        else:
-            msg += f"{i}\t{i}\t{dic[i]['account']}\t{dic[i]['password']}\n"
-
-    await bot.send_private_msg(user_id=ev.user_id, message=msg)
-
-
 async def _account_verify(bot,
                           ev,
                           qqid: str,
@@ -517,7 +285,6 @@ async def _account_verify(bot,
         dic[qqid]["pcrname"] = _info["pcrname"]
         dic[qqid]["pcrid"] = _info["pcrid"]
         dic[qqid]["updatetime"] = str(datetime.datetime.now())
-        dic[qqid]["status"] = "1"
         if ret == 0:
             await bot.send(
                 ev,
@@ -539,7 +306,6 @@ async def _account_verify(bot,
             outp = f'{qqid}({dic[qqid]["name"]}) verification failed: {info["message"]}'
         if "用户名或密码错误" or "密码不安全" in str(info["message"]):
             dic[qqid]["updatetime"] = str(datetime.datetime.now())
-            dic[qqid]["status"] = "2"
             if ret in [0, 3]:
                 try:
                     await bot.send_private_msg(
@@ -564,115 +330,6 @@ async def _account_verify(bot,
     return outp
 
 
-@sv.on_fullmatch(("账号批量校验"))
-async def account_verify_batch(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    dic = get_sec()
-    if ev.group_id is None:
-        return
-    group_member_qqid_list = await get_group_member_qqid_list(bot, ev)
-    err_msg = []
-    cnt = 0
-    for qqid in dic:
-        if group_member_qqid_list != [] and str(
-                qqid) not in group_member_qqid_list:
-            continue
-        cnt += 1
-    await bot.send(ev, f'Verification Started ({cnt} to check)')
-    for qqid in dic:
-        if group_member_qqid_list != [] and str(
-                qqid) not in group_member_qqid_list:
-            continue
-        account_info = dic[qqid]
-        try:
-            await _account_verify(bot, ev, qqid, account_info, 3, ev.user_id)
-        except Exception as e:
-            err_msg.append(f'{e}')
-            await bot.send(ev, f'{e}')
-    prefix = "group" if group_member_qqid_list != [] else "all"
-
-    await bot.send(ev, f'Verification Passed ({cnt - len(err_msg)}/{cnt})')
-
-
-@sv.on_prefix(("账号校验"))
-async def account_verify(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    dic = get_sec()
-    ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
-    result = ret.findall(str(ev.message))
-    outp = []
-    for qqid in result:
-        if qqid not in dic:
-            outp.append(f'{qqid}不在密码本中')
-            continue
-        account_info = dic[qqid]
-        outp.append(await _account_verify(bot, ev, qqid, account_info, 1, ev.user_id))
-    await bot.send(ev, '\n'.join(outp))
-
-
-@sv.on_fullmatch(("催交号"))
-async def 催交号(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    dic = get_sec()
-    outp = []
-    for qqid in dic:
-        info = dic[qqid]
-        if info["status"] in [3, '3', "未交号"]:
-            try:
-                await asyncio.sleep(10)
-                await bot.send_private_msg(
-                    user_id=int(qqid), message=f'请使用指令：\npcr 账号 密码\n以交号。')
-            except:
-                outp.append(f'{qqid}({info["name"]}) 未交号 私聊发送失败')
-            else:
-                outp.append(f'{qqid}({info["name"]}) 未交号 私聊发送成功')
-
-        elif info["status"] in [2, '2', "错误"]:
-            try:
-                await asyncio.sleep(10)
-                await bot.send_private_msg(
-                    user_id=int(qqid),
-                    message=f'您的pcr账号{info["name"]}({info["account"]} / {info["password"]})状态为：错误\n请使用指令：\n更新密码 <密码>\n更改。'
-                )
-            except:
-                outp.append(f'{qqid}({info["name"]}) 错误 私聊发送失败')
-            else:
-                outp.append(f'{qqid}({info["name"]}) 错误 私聊发送成功')
-    if outp != []:
-        await bot.send(ev, "\n".join(outp))
-    else:
-        await bot.send(ev, "根据数据库记录，所有成员状态正常\n可以使用[账号批量校验]指令以强制检测。")
-
-
-@sv.on_prefix(("加入密码本"))
-# 加入密码本 <@号>+
-async def 加入密码本(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)) and (ev.user_id
-                                                      not in group_manager):
-        return
-    dic = get_sec()
-    ret = re.compile(r"\[CQ:at,qq=(\d*)\]")
-    result = ret.findall(str(ev.message))
-    outp = []
-    for qqid in result:
-        qqid = str(qqid)
-        if qqid in dic:
-            outp.append(f'{qqid}已在密码本中')
-        else:
-            dic[qqid] = {}
-            dic[qqid]["name"] = qqid
-            dic[qqid]["account"] = ""
-            dic[qqid]["password"] = ""
-            dic[qqid]["status"] = "3"
-            dic[qqid]["updatetime"] = str(datetime.datetime.now())
-            outp.append(f'{qqid}已被加入密码本')
-    save_sec(dic)
-    await bot.send(ev, '\n'.join(outp))
-
-
 async def get_group_member_qqid_list(bot, ev):
     '''
     :return [str(qqid)] 若非群聊返回[]
@@ -688,7 +345,7 @@ async def get_group_member_qqid_list(bot, ev):
     return group_member_qqid_list
 
 
-@sv.on_prefix(("查角色"))
+# @sv.on_prefix(("查角色"))
 async def get_unit(bot, ev):
     unit_tofound_list = ev.message.extract_plain_text().strip().replace(
         '\r', "").split('\n')
@@ -807,9 +464,6 @@ async def get_target_account(bot, ev, is_strict):
 stamina_short = False
 
 curpath = dirname(__file__)
-with open(join(curpath, 'equip_list.json'), encoding='utf-8') as fp:
-    equip2list = load(fp)
-
 with open(join(curpath, 'equip_name.json'), "r", encoding="utf-8") as fp:
     equip2name = load(fp)
 
@@ -1026,9 +680,26 @@ async def room_accept_all(account_info) -> str:
     outp = []
     for item_id in outcome:
         outp.append(f'{item_id2name.get(item_id, item_id)}={outcome[item_id]}({stock[item_id]})')
-    # outp = []
-    # for item in res["reward_list"]:
-    #     outp.append(f'{item.get("id", "Unknown")}={item.get("received", "Unknown")}({item.get("stock", "Unknown")})')
+    
+    have_kokoro_wallet = any([x for x in data["user_room_item_list"] if x["room_item_id"] == 2815])
+    if not have_kokoro_wallet:
+        try:
+            buy_wallet_request = {
+                "item_id": 2815,
+                "item_count": 1,
+                "purchase_type": 2,
+                "floor_number": 1,
+                "background_theme": data["room_layout"]["background_theme"],
+                "layout": data["room_layout"]["floor_layout"][0],
+                "has_update": 0,
+                "room_coin": await query.get_item_stock(account_info, 90007)
+            }
+            buy_wallet_request["layout"]["theme"]["background_theme"] = buy_wallet_request["background_theme"]
+            _ = await query.query(account_info, '/room/buy', buy_wallet_request)
+        except Exception as e:
+            outp.append(f'Warn. 检测到尚未购买可可萝的钱包，但自动购买失败：{e}')
+        else:
+            outp.append(f'检测到尚未购买可可萝的钱包，已自动购买')
     return f'Succeed. 收取家园产出成功：{" ".join(outp)}'
 
 
@@ -1043,8 +714,6 @@ async def room_furniture_upgrade(account_info):
     # 一个有产出效果的道具若没有被摆在外面，不会有"item_base_time"字段
     # {"null": 1, "serial_id": 4, "room_item_id": 1, "room_item_level": 18, "item_base_time": 1671546751, "level_up_end_time": 1671547164, "item_count": 0}
 
-    furniture_with_output_room_item_id_list = [1, 140, 141, 142, 144, 145, 146, 147, 1211, 2206, 2810]
-
     furniture_with_output_room_item_id2name = {
         1: "花凛的桌子",
         140: "无限点心桌",
@@ -1056,13 +725,14 @@ async def room_furniture_upgrade(account_info):
         147: "沧海淡雪糖",
         1211: "旷世之蛋和加量米饭",
         2206: "最高级龙尾关东煮",
-        2810: "天露金甘水"
+        2810: "天露金甘水",
+        2817: "大地仙人掌蜜汁松饼"
     }  # 所以143是什么
 
     try:
         furniture_unput_room_item_name_list = []
         for furniture in data["user_room_item_list"]:
-            if furniture["room_item_id"] in furniture_with_output_room_item_id_list and ("item_base_time" not in furniture and "level_up_end_time" not in furniture):
+            if furniture["room_item_id"] in furniture_with_output_room_item_id2name and ("item_base_time" not in furniture and "level_up_end_time" not in furniture):
                 furniture_unput_room_item_name_list.append(furniture_with_output_room_item_id2name.get(furniture["room_item_id"], str(furniture["room_item_id"])))
     except Exception as e:
         return f'Fail. 分析含附加效果家具信息失败：{e}'
@@ -1339,7 +1009,7 @@ async def sweep_explore_cloister(account_info):
             "return_cleared_ex_quest": 1
         })
     except Exception as e:
-        return 'Abort. 当前露娜塔未开放，已自动关闭该功能。'
+        return 'Skip. 当前露娜塔未开放'
 
     try:
         if data["cloister_first_cleared_flag"] == 0:
@@ -1370,97 +1040,67 @@ async def sweep_explore_cloister(account_info):
     return '\n'.join(msg)
 
 
-async def sweep_explore_exp(account_info) -> str:
+async def sweep_explore(account_info, mode: str, friendly_name: str, api: str, quest_id_base: int) -> str:  # enum("passed", "max")
+    if mode == "disabled":
+        return
+    if mode not in ["passed", "max"]:
+        return f'Fail. 无法识别的模式：{mode}'
+    
     try:
         home_index = await query.get_home_index(account_info)
+        x_remain = home_index["training_quest_max_count"][api] - home_index["training_quest_count"][api]
     except Exception as e:
         return f'Fail. 获取主页信息失败：{e}'
-    x_remain = home_index["training_quest_max_count"][
-        "exp_quest"] - home_index["training_quest_count"]["exp_quest"]
+    
     if x_remain == 0:
-        return f'Skip. 今日已完成EXP探索'
+        return f'Skip. 今日已完成{friendly_name}探索'
     try:
         ticket = await query.get_ticket_num(account_info)
     except Exception as e:
         return f'Fail. 获取扫荡券数量失败：{e}'
     s = []
     if ticket < x_remain:
-        s.append(f'Warning: 扫荡券数量{ticket}张，小于剩余EXP探索次数{x_remain}次')
+        s.append(f'Warning: 扫荡券数量{ticket}张，小于剩余{friendly_name}探索次数{x_remain}次')
     y = min(ticket, x_remain)
     if y == 0:
         s.append(f'刷取0次')
-    else:
-        try:
-            quest_dict = await query.get_all_quest_dict(account_info)
-        except Exception as e:
-            s.append(f'Fail. 获取关卡列表失败：{e}')
-        else:
-            f = True
-            for i in range(21002013, 21002000, -1):
-                if i in quest_dict and quest_dict[i]["clear_flg"] == 3:
-                    f = False
-                    try:
-                        await query.query(
-                            account_info, "/training_quest/quest_skip", {
-                                "quest_id": i,
-                                "random_count": y,
-                                "current_ticket_num": ticket
-                            })
-                    except Exception as e:
-                        s.append(f'Fail. EXP探索({i%100}级，{y}次)失败：{e}')
-                        break
-                    else:
-                        s.append(f'Succeed. 成功进行EXP探索({i%100}级，{y}次)')
-                        break
-            if f:
-                s.append(f'Fail. 没有三星通关的EXP探索关卡')
-    return '\n'.join(s)
-
-
-async def sweep_explore_mana(account_info) -> str:
+        return '\n'.join(s)
+    
     try:
-        home_index = await query.get_home_index(account_info)
+        quest_dict = await query.get_all_quest_dict(account_info)
     except Exception as e:
-        return f'Fail. 获取主页信息失败：{e}'
-    x_remain = home_index["training_quest_max_count"][
-        "gold_quest"] - home_index["training_quest_count"]["gold_quest"]
-    if x_remain == 0:
-        return f'Skip. 今日已完成MANA探索'
-    try:
-        ticket = await query.get_ticket_num(account_info)
-    except Exception as e:
-        return f'Fail. 获取扫荡券数量失败：{e}'
-    s = []
-    if ticket < x_remain:
-        s.append(f'Warning: 扫荡券数量{ticket}张，小于剩余MANA探索次数{x_remain}次')
-    y = min(ticket, x_remain)
-    if y == 0:
-        s.append(f'刷取0次')
-    else:
-        try:
-            quest_dict = await query.get_all_quest_dict(account_info)
-        except Exception as e:
-            s.append(f'Fail. 获取关卡列表失败：{e}')
-        else:
-            f = True
-            for i in range(21001013, 21001000, -1):
-                if i in quest_dict and quest_dict[i]["clear_flg"] == 3:
-                    f = False
-                    try:
-                        await query.query(
-                            account_info, "/training_quest/quest_skip", {
-                                "quest_id": i,
-                                "random_count": y,
-                                "current_ticket_num": ticket
-                            })
-                    except Exception as e:
-                        s.append(f'Fail. MANA探索({i%100}级，{y}次)失败：{e}')
-                        break
-                    else:
-                        s.append(f'Succeed. 成功进行MANA探索({i%100}级，{y}次)')
-                        break
-            if f:
-                s.append(f'Fail. 没有三星通关的MANA探索关卡')
+        s.append(f'Fail. 获取关卡列表失败：{e}')
+        return '\n'.join(s)
+    
+    old_max_explore_level = gs_fileIo.MaxExploreLevel
+    max_explore_level = old_max_explore_level
+    while quest_id_base + max_explore_level + 1 in quest_dict:
+        max_explore_level += 1
+    if max_explore_level != old_max_explore_level:
+        gs_fileIo.MaxExploreLevel = max_explore_level
+    
+    max_explore_id = quest_id_base + max_explore_level
+    if mode == "max":
+        if quest_dict.get(max_explore_id, {}).get("clear_flg", 0) != 3:
+            s.append(f'Warn. 您设置仅尝试扫荡当前开放的最高等级探索({max_explore_level})，但尚未通关。')
+            return '\n'.join(s)
+        
+    for i in range(max_explore_id, quest_id_base, -1):
+        if quest_dict.get(i, {}).get("clear_flg", 0) == 3:
+            try:
+                await query.query(
+                    account_info, "/training_quest/quest_skip", {
+                        "quest_id": i,
+                        "random_count": y,
+                        "current_ticket_num": ticket
+                    })
+            except Exception as e:
+                s.append(f'Fail. 进行{friendly_name}探索（{i%100}级，{y}次）失败：{e}')    
+            else:
+                s.append(f'Succeed. 成功进行{friendly_name}探索（{i%100}级，{y}次）')
+            return '\n'.join(s)
+    
+    s.append(f'Fail. 没有三星通关的{friendly_name}探索关卡')
     return '\n'.join(s)
 
 
@@ -1474,7 +1114,8 @@ async def buy_exp(account_info, buy_cnt=1):
         20001: "迷你经验药剂",
         20002: "经验药剂",
         20003: "高级经验药剂",
-        20004: "超级经验药剂"
+        20004: "超级经验药剂",
+        20005: "究极经验药剂"
     }
 
     try:
@@ -1484,7 +1125,12 @@ async def buy_exp(account_info, buy_cnt=1):
 
     exp_cnt_outp = " ".join([f'{exp_name}={exp_cnt[exp_id]}' for exp_id, exp_name in exp_id2name.items()])
 
-    threshold = 9999999
+    threshold = 100000
+    if exp_cnt.get(20004, 0) > threshold:
+        return f'Abort. 设定全局经验瓶阈值为{threshold}。当前拥有{exp_id2name[20004]}({exp_cnt[20004]})超过阈值。'
+    if exp_cnt.get(20005, 0) > threshold // 5:
+        return f'Abort. 设定全局经验瓶阈值为{threshold // 5}。当前拥有{exp_id2name[20005]}({exp_cnt[20005]})超过阈值。'
+    
     if mana < 10000000:
         threshold = 0
     elif mana < 100000000:
@@ -1493,7 +1139,7 @@ async def buy_exp(account_info, buy_cnt=1):
         threshold = 5000
 
     if max(exp_cnt.values()) > threshold:
-        return f'Abort. 当前拥有Mana{mana // 10000}w，设定经验瓶阈值为{threshold}。当前拥有经验瓶数量({exp_cnt_outp})超过阈值。已自动关闭该功能。'
+        return f'Abort. 当前拥有Mana{mana // 10000}w，设定经验瓶阈值为{threshold}。当前拥有经验瓶数量({exp_cnt_outp})超过阈值。'
 
     try:
         data = await query.query(account_info, "/shop/item_list")
@@ -1704,7 +1350,8 @@ async def dungeon_sweep(account_info, mode: str):  # enum("passed", "max")
         31004: "沧海的孤塔",
         31005: "毒瘴的暗棱",
         31006: "绿龙的骸岭",
-        31007: "天上的浮城"
+        31007: "天上的浮城",
+        31008: "沙瀑的底部"
     }
     try:
         data = await query.query(account_info, "/dungeon/info")
@@ -1883,25 +1530,26 @@ async def buy_shop(account_info, cnt, buy_chara_frag, buy_equip_frag, shop_name,
     return '\n'.join(msg) + '\n' + '\n'.join(bought_equip_frag_outp)
 
 
-async def buy_jjc_shop(account_info, cnt=1, buy_chara_frag=False, buy_equip_frag=True):
-    return await buy_shop(account_info, cnt, buy_chara_frag, buy_equip_frag, "竞技场", 202, 90003, 20000, 50000, 100)
+async def buy_jjc_shop(account_info, sweep_cnt, equip_limit: int, buy_chara_frag=False, buy_equip_frag=True):
+    return await buy_shop(account_info, sweep_cnt, buy_chara_frag, buy_equip_frag, "竞技场", 202, 90003, 20000, 50000, equip_limit)
 
 
-async def buy_pjjc_shop(account_info, cnt=1, buy_chara_frag=False, buy_equip_frag=True):
-    return await buy_shop(account_info, cnt, buy_chara_frag, buy_equip_frag, "公主", 203, 90004, 20000, 50000, 100)
+async def buy_pjjc_shop(account_info, sweep_cnt, equip_limit: int, buy_chara_frag=False, buy_equip_frag=True):
+    return await buy_shop(account_info, sweep_cnt, buy_chara_frag, buy_equip_frag, "公主", 203, 90004, 20000, 50000, equip_limit)
 
 
-async def buy_dungeon_shop(account_info, cnt=1, buy_chara_frag=False, buy_equip_frag=True):
-    return await buy_shop(account_info, cnt, buy_chara_frag, buy_equip_frag, "地下城", 204, 90002, 50000, 100000, 300)
+async def buy_dungeon_shop(account_info, sweep_cnt, equip_limit: int, buy_chara_frag=False, buy_equip_frag=True):
+    return await buy_shop(account_info, sweep_cnt, buy_chara_frag, buy_equip_frag, "地下城", 204, 90002, 50000, 100000, equip_limit)
 
 
-async def buy_flash_shop(account_info, buy_exp_frag=False):
-    buy_equip_frag = True
-    shop_name = "限时"
-    shop_id = 212
-    exp_coin_threshold = 100000000
-    equip_coin_threshold = 10000000
-    equip_cnt_threshold = 300
+async def buy_flash_shop(account_info, buy_exp_frag: bool = False, buy_equip_frag: bool = True, shop_name: str = "限时", shop_id: int = 212, exp_coin_threshold: int = 100000000, equip_coin_threshold: int = 10000000, equip_cnt_threshold: int = 500):
+    exp_id2name = {
+        20001: "迷你经验药剂",
+        20002: "经验药剂",
+        20003: "高级经验药剂",
+        20004: "超级经验药剂",
+        20005: "究极经验药剂"
+    }
 
     try:
         data = await query.query(account_info, "/shop/item_list")
@@ -1940,7 +1588,7 @@ async def buy_flash_shop(account_info, buy_exp_frag=False):
                     slot.append(int(item["slot_id"]))
 
         if buy_exp_frag and shop_coin >= exp_coin_threshold:
-            if int(item.get("item_id", -1)) == 20004:
+            if int(item.get("item_id", -1)) in exp_id2name:
                 slot.append(int(item["slot_id"]))
 
     slot = list(set(slot))
@@ -1958,13 +1606,14 @@ async def buy_flash_shop(account_info, buy_exp_frag=False):
         return f'Fail. 购买失败：{e}'
 
     bought_equip_frag: Dict[str, int] = {}  # item_id_str: cnt
-    bought_exp_cnt = 0
+    bought_equip_frag_outp = []
+    
     try:
         for item in ret["purchase_list"]:  # 维护购买列表
             item_id_str = str(item["id"])
             received_cnt = int(item["received"])
-            if item_id_str == "20004":
-                bought_exp_cnt += received_cnt
+            if int(item_id_str) in exp_id2name:
+                bought_equip_frag_outp.append(f'{exp_id2name[int(item_id_str)]}*{received_cnt}')
             else:
                 item_id_str = f'10{str(item["id"])[2:]}'
                 bought_equip_frag[item_id_str] = bought_equip_frag.get(item_id_str, 0) + received_cnt
@@ -1972,10 +1621,7 @@ async def buy_flash_shop(account_info, buy_exp_frag=False):
     except Exception as e:
         return f'Fail. 获取购买结果失败：{e}'
 
-    bought_equip_frag_outp = []
-    bought_equip_frag_outp.append(f'Succeed. 共花费{(shop_coin - shop_coin_new) // 10000}w MANA。购得物品：')
-    if bought_exp_cnt > 0:
-        bought_equip_frag_outp.append(f'超级经验瓶*{bought_exp_cnt}')
+    bought_equip_frag_outp.insert(0, f'Succeed. 共花费{(shop_coin - shop_coin_new) // 10000}w MANA。购得物品：')
     if len(bought_equip_frag):
         bought_equip_frag: List[Tuple[str, int]] = list(sorted(bought_equip_frag.items(), key=lambda x: x[0], reverse=True))
         for item in bought_equip_frag:
@@ -1987,13 +1633,20 @@ async def buy_flash_shop(account_info, buy_exp_frag=False):
 async def accept_jjc_reward(account_info):
     try:
         arena_info = await query.query(account_info, '/arena/info')
-        if arena_info["reward_info"]["count"] == 0:
-            return 'Skip. 没有未收取的jjc币'
+        assert arena_info.get("reward_info", {}).get("count", -1) != -1, "无报酬信息"
     except Exception as e:
         return f'Fail. 获取竞技场信息失败：{e}'
+
+    if arena_info["reward_info"]["count"] == 0:
+        return 'Skip. 没有未收取的jjc币'
+    
+    group_id = arena_info.get("arena_info", {}).get("group", -1)
+    rank = arena_info.get("arena_info", {}).get("rank", -1)
+    jjc_info = "" if group_id == -1 else f'({rank}名 / {group_id}场)'
+    
     try:
         data = await query.query(account_info, '/arena/time_reward_accept')
-        return f'Succeed. 成功收取jjc币{data["reward_info"]["count"]}个'
+        return f'Succeed. 成功收取jjc币{data["reward_info"]["received"]}个。{jjc_info}'
     except Exception as e:
         return f'Fail. 获取jjc币失败：{e}'
 
@@ -2001,14 +1654,20 @@ async def accept_jjc_reward(account_info):
 async def accept_pjjc_reward(account_info):
     try:
         arena_info = await query.query(account_info, '/grand_arena/info')
-        if arena_info["reward_info"]["count"] == 0:
-            return 'Skip. 没有未收取的pjjc币'
+        assert arena_info.get("reward_info", {}).get("count", -1) != -1, "无报酬信息"
     except Exception as e:
-        return f'Fail. 获取公主竞技场信息失败：{e}'
+        return f'Fail. 获取竞技场信息失败：{e}'
+
+    if arena_info["reward_info"]["count"] == 0:
+        return 'Skip. 没有未收取的pjjc币'
+    
+    group_id = arena_info.get("grand_arena_info", {}).get("group", -1)
+    rank = arena_info.get("grand_arena_info", {}).get("rank", -1)
+    jjc_info = "" if group_id == -1 else f'({rank}名 / {group_id}场)'
+    
     try:
-        data = await query.query(account_info,
-                                 '/grand_arena/time_reward_accept')
-        return f'Succeed. 成功收取pjjc币{data["reward_info"]["count"]}个'
+        data = await query.query(account_info, '/grand_arena/time_reward_accept')
+        return f'Succeed. 成功收取pjjc币{data["reward_info"]["received"]}个。{jjc_info}'
     except Exception as e:
         return f'Fail. 获取pjjc币失败：{e}'
 
@@ -2020,7 +1679,7 @@ class GachaType(IntEnum):
     精选 = 3  # 新池
     附奖 = 31  # 复刻池
     星3确定 = 7
-    公主 = -2  # 不知道
+    公主 = 8
     unknown = -1
 
 
@@ -2039,12 +1698,18 @@ def getGachaType(gacha: dict) -> GachaType:
         return GachaType.附奖
     if gacha.get("cost_num_single", -1) == 1500 and str(gacha.get("id", 0))[0] == '7':
         return GachaType.星3确定
+    
     recommend_unit_id_list = [x.get("unit_id", 100001) for x in gacha.get("recommend_unit", [])]
     if set(recommend_unit_id_list) == set([105701, 105702, 101201, 101202, 101101, 101102]):
         return GachaType.白金
+    
     bonus_unit_id_list = [x.get("target_unit_id", 100001) for x in gacha.get("bonus_item_list", [])]
-    if len(set(bonus_unit_id_list) - set(recommend_unit_id_list)) == 0:
+    if gacha.get("cost_num_single", -1) == 150 and str(gacha.get("id", 0))[0] == '3' and len(set(bonus_unit_id_list) - set(recommend_unit_id_list)) == 0:
         return GachaType.精选
+    
+    if gacha.get("cost_num_single", -1) == 150 and str(gacha.get("id", 0))[0] == '5' and len(set(bonus_unit_id_list) - set(recommend_unit_id_list)) == 0 and 180901 in recommend_unit_id_list and 180902 in recommend_unit_id_list and len(recommend_unit_id_list) > 7:
+        return GachaType.公主
+    
     return GachaType.unknown
 
 
@@ -2070,10 +1735,10 @@ async def get_gacha_free(account_info):
             except Exception as e:
                 return f'Fail. 抽取免费十连扭蛋失败：{e}'
             else:
-                return f'Succeed.'
+                return f'Succeed. 抽取免费十连扭蛋成功'
 
 
-async def free_gacha_special_event(account_info):
+async def free_gacha_special_event(account_info):                  
     try:
         data = await query.query(account_info, '/gacha/index')
         assert "gacha_info" in data, f'返回字段不含["gacha_info"]'
@@ -2084,6 +1749,10 @@ async def free_gacha_special_event(account_info):
         return 'Abort. 当前没有免费十连活动，已自动关闭该功能。'
     if data["campaign_info"]["fg10_last_exec_time"] == data["campaign_info"]["fg10_exec_cnt"] == 0:
         return 'Abort. 当前没有免费十连活动，已自动关闭该功能。'
+
+    for gacha in data["gacha_info"]:
+        print(gacha)
+        print(getGachaType(gacha))
 
     # 当前有免费十连活动
     remain_cnt = data["campaign_info"]["fg10_exec_cnt"]
@@ -2104,9 +1773,9 @@ async def free_gacha_special_event(account_info):
                 msg = []
                 if getGachaType(gacha) == GachaType.附奖 and gacha["selected_item_id"] == 0:
                     try:
-                        res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100044, "item_id": 31155}) # temp TODO modifiy
+                        res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100065, "item_id": 31180}) # temp TODO modifiy # 20240227:100058/31170 #20240423:100065/31180 富婆
                     except Exception as e:
-                        return f'Fail. 设置附奖扭蛋奖品角色失败：{e}'
+                        return f'Fail. 检测到当前为复刻池，自动设置附奖扭蛋奖品角色失败'
                     else:
                         msg.append(f'检测到当前为复刻池，自动设置附奖扭蛋奖品角色成功')
                 
@@ -2160,6 +1829,8 @@ async def event_gacha(account_info, event_id_list=None):
         msg = []
 
     for event_id in event_id_list:
+        if event_id == 10087: # 情相连心相系 复刻活动 前后篇共用一个池
+            continue
         if str(event_id) not in event_gacha_info:
             msg.append(f'Abort. 未记录活动{event_id}对应的扫荡券id，暂无法提供服务')
             continue
@@ -2378,7 +2049,10 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
             full_story = False
         if (id4 * 1000 + 8) not in cache_chara_story_list: # 上面的列表可能更新不及时，添加此判断：该角色缓存中无8话剧情则视为不满
             full_story = False
-            
+        
+        # if id4 == 1164: # 优妮(圣学祭) 只出了一话 # 现在出全了
+        #     max_read_id = 1
+        max_read_id = 1
         if full_story:
             max_read_id = love_level
         else:
@@ -2917,16 +2591,15 @@ async def get_event_id_list(account_info, sweep_type: str = "all", only_open: bo
         raise Exception(f'Fail. 获取当前活动列表失败：{e}')
 
     if event_id_list == []:
-        raise Exception("Abort. 当前无开放的活动")
+        raise Exception("Skip. 当前无开放的活动")
 
     if sweep_type != "all":
         new_event_id_list = await get_new_event_id_list(account_info, event_id_list)
-        old_event_id_list = list(set(event_id_list) - set(new_event_id_list))
-        if len(new_event_id_list) and len(old_event_id_list):
-            if sweep_type == "new":
-                event_id_list = new_event_id_list
-            elif sweep_type == "old":
-                event_id_list = old_event_id_list
+        old_event_id_list = list(sorted(set(event_id_list) - set(new_event_id_list), reverse=True))
+        if sweep_type == "new": 
+            event_id_list = new_event_id_list or old_event_id_list
+        elif sweep_type == "old":
+            event_id_list = old_event_id_list or new_event_id_list
 
     return event_id_list, msg if return_close_msg else []
 
@@ -2951,7 +2624,7 @@ async def event_hard_boss_sweep(account_info, cnt: Union[int, str], event_id_lis
         try:
             data = await query.query(account_info, "/event/hatsune/top", {"event_id": event_id})
             boss_ticket_num = data["boss_ticket_info"]["stock"]
-            oneblow_kill_count = [x["oneblow_kill_count"] for x in data["boss_battle_info"] if x["boss_id"] == int(f'{event_id}02')][0]
+            oneblow_kill_count = [x.get("oneblow_kill_count", 0) for x in data["boss_battle_info"] if x["boss_id"] == int(f'{event_id}02')][0]
         except Exception as e:
             msg.append(f'Fail. 获取活动{event_id}信息失败：{e}')
             continue
@@ -3016,7 +2689,7 @@ async def event_normal_sweep(account_info, sweep_type: str, buy_stamina_passive_
     except Exception as e:
         return str(e)
 
-    event_id = event_id_list[0]
+    event_id = event_id_list[0] if sweep_type == "new" else event_id_list[-1]
 
     try:
         event_quest = await query.query(account_info, "/event/hatsune/quest_top", {"event_id": event_id})
@@ -3078,6 +2751,8 @@ async def event_hard_sweep(account_info, sweep_type: str, buy_stamina_passive_ma
             if f == False:
                 msg.append(f'Abort. H1-{i} Unlock')
                 break
+        if stamina_short:
+            break
     return ' '.join(msg)
 
 
@@ -3278,6 +2953,9 @@ async def allin_N2(account_info, d: dict):
 
 
 async def sweep_normal_smart(account_info):
+    def weight(x: float) -> float:
+        return 32 - 20 * math.atan(x / 24 - 4)
+    
     try:
         stamina = await query.get_stamina(account_info)
     except Exception as e:
@@ -3288,6 +2966,7 @@ async def sweep_normal_smart(account_info):
         ticket = await query.get_ticket_num(account_info)
     except Exception as e:
         return f'Fail. 获取扫荡券数量失败：{e}'
+
     try:
         quest_dict = await query.get_all_quest_dict(account_info)  # id(int): dict
     except Exception as e:
@@ -3296,35 +2975,43 @@ async def sweep_normal_smart(account_info):
         user_equip = await query.get_user_equip_dict(account_info)  # id(int):stock(int)
     except Exception as e:
         return f'Fail. 获取装备列表失败：{e}'
+    
     s = [f'当前体力{stamina}']
     y = min(ticket, stamina // 10)
     if y == ticket:
         s.append(f'Warn. 扫荡券仅剩{ticket}张')
+
+    max_major = 0
     map_value_dict = {}  # map_id(int): value(int)
-    for map_id, equip_drop_list in map2equip.items():
+    for map_id, equip_drop_list in map2equip.items():  # "33-6": ["125076", "115556", "125376"],
         major, minor = map_id.split('-')  # "33", "6"
         quest_id = int(f'11{int(major):03d}{int(minor):03d}')
         if quest_id not in quest_dict or quest_dict[quest_id]["clear_flg"] != 3:
             continue
-        map_value = 0
-        max_value = 0
-        for equip_no in equip_drop_list:  # "125076"
-            max_value = max(max_value, user_equip.get(int(equip_no), 0))
-            map_value += user_equip.get(int(equip_no), 0)
-        map_value -= max_value
-        map_value_dict[quest_id] = map_value
+        max_major = max(max_major, int(major))
+
+        map_value_list = [0, 0, 0]
+        for index, equip_no in enumerate(equip_drop_list):
+            if index > 2:
+                break
+            x = weight(user_equip.get(int(equip_no), 0))
+            if index == 2:
+                x *= 0.7
+            map_value_list[index] = x
+        map_value_list.sort(reverse=True)
+        map_value_dict[quest_id] = map_value_list[0] * 5 + map_value_list[1] * 2 + map_value_list[2] * 1
+        # print(f'{map_id} [{user_equip.get(int(equip_drop_list[0]), 0)}, {user_equip.get(int(equip_drop_list[1]), 0)}, {user_equip.get(int(equip_drop_list[0]), 2)}] {map_value_list} {int(major) * 4 + map_value_list[0] * 3 + map_value_list[1] * 2 + map_value_list[2]}')
+
     if map_value_dict == {}:
-        s.append("Fail. 该账号没有三星通关的normal关卡")
-    else:
-        map_id, map_value = min(map_value_dict.items(), key=(lambda x: x[1]))
+        return "Abort. 该账号没有三星通关的normal关卡"
+
+    map_sorted = sorted(map_value_dict.items(), key=(lambda x: x[1]), reverse=True)
+    for map_id, map_value in map_sorted:
         major = map_id // 1000 % 1000
         minor = map_id % 1000
         s.append(f'已自动选取地图{major}-{minor}，包含装备为：')
-        s4 = ""
         for equip_id in map2equip[f'{major}-{minor}']:  # "125046"
-            s4 += f'{equip2name.get(f"10{equip_id[2:]}", equip_id)}({user_equip.get(int(equip_id), 0)}个) '
-        s.append(s4)
-
+            s.append(f'{equip2name.get(f"10{equip_id[2:]}", equip_id)}({user_equip.get(int(equip_id), 0)})')
         try:
             info = await query.query(
                 account_info, "/quest/quest_skip", {
@@ -3336,8 +3023,8 @@ async def sweep_normal_smart(account_info):
             s.append(f'Fail. 扫荡{major}-{minor}失败：{e}')
         else:
             s.append(f'Succeed. 成功刷取{major}-{minor}({y}次)')
-
-    return '\n'.join(s)
+        break
+    return " ".join(s)
 
 
 async def advice_normal_smart(account_info):
@@ -3360,8 +3047,6 @@ async def advice_normal_smart(account_info):
         quest_id = int(f'11{int(major):03d}{int(minor):03d}')
         if quest_id not in quest_dict or quest_dict[quest_id]["clear_flg"] != 3:
             continue
-        if int(major) < 24 and len(map_value_dict):
-            break
         max_major = max(max_major, int(major))
 
         map_value_list = [0, 0, 0]
@@ -3373,7 +3058,7 @@ async def advice_normal_smart(account_info):
                 x *= 0.7
             map_value_list[index] = x
         map_value_list.sort(reverse=True)
-        map_value_dict[quest_id] = 2 * (int(major) - max_major) + map_value_list[0] * 1.5 + map_value_list[1] * 1 + map_value_list[2] * 0.5
+        map_value_dict[quest_id] = map_value_list[0] * 5 + map_value_list[1] * 2 + map_value_list[2] * 1
         # print(f'{map_id} [{user_equip.get(int(equip_drop_list[0]), 0)}, {user_equip.get(int(equip_drop_list[1]), 0)}, {user_equip.get(int(equip_drop_list[0]), 2)}] {map_value_list} {int(major) * 4 + map_value_list[0] * 3 + map_value_list[1] * 2 + map_value_list[2]}')
 
     if map_value_dict == {}:
@@ -3395,12 +3080,13 @@ async def advice_normal_smart(account_info):
     return "\n".join(outp)
 
 
-@sv.on_fullmatch(("#刷图推荐"))
+@sv.on_prefix(("#刷图推荐"))
 async def advice_normal_smart_interface(bot, ev):
     try:
-        account_info, qqid, nam = await get_target_account(bot, ev, True)
+        account_info, qqid, nam = await get_target_account(bot, ev, False)
     except:
         return
+    
     try:
         await query.VerifyAccount(account_info)
     except Exception as e:
@@ -3460,7 +3146,7 @@ async def get_daily_result(bot, ev):
         await bot.finish(ev, f'{qqid}不在账号表中！')
     config = dic[qqid]
     if 'pcrid' not in config:
-        await bot.finish(ev, '没有账号基础信息，请先发送“查box”')
+        await bot.finish(ev, '没有账号基础信息，请重新交号')
     if 'daily_config' not in config:
         await bot.finish(ev, '不存在清日常配置文件，请先发送“清日常设置”')
     if exists(join(curpath, f'daily_result/{qqid}.png')):
@@ -3508,7 +3194,7 @@ async def do_daily_set_cron(bot, ev):
         await bot.finish(ev, f'{qqid}不在账号表中！')
     config = dic[qqid]
     if 'pcrid' not in config:
-        await bot.finish(ev, '没有账号基础信息，请先发送“查box”')
+        await bot.finish(ev, '没有账号基础信息，请重新交号')
     if 'daily_config' not in config:
         await bot.finish(ev, '不存在清日常配置文件，请先发送“清日常设置”')
     config["daily_config"]["cron_no_response_1"] = h1
@@ -3590,7 +3276,7 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
         await bot.finish(ev, f'{qqid}不在账号表中！请发送 #pcr <账号> <密码> 以交号')
     config = dic[qqid]
     if 'pcrid' not in config:
-        await bot.finish(ev, '没有账号基础信息。请先发送“查box”')
+        await bot.finish(ev, '没有账号基础信息，请重新交号')
     if 'daily_config' not in config:
         await _do_daily(bot, ev)
     if 'url_key' not in config:
@@ -3632,11 +3318,25 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
         await bot.send(ev, f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
         
 
+def GetDailyQueueFriendlyInfo(need_mask: bool = False) -> List[str]:
+    global g_doDailyQueue
+    nowtime = getNowtime()
+    return [f"{v[0]}: {v[1]/60:.1f}m" for v in sorted([((qqstr[:5] + '*' * (len(qqstr) - 5)) if need_mask else qqstr, nowtime - timestamp) for qqstr, timestamp in g_doDailyQueue.items()], key=lambda x: x[1], reverse=True)]
+
+
+@sv.on_fullmatch(("查询清日常队列", "查询清日常列表"))
+async def GetDailyQueueInterface(bot: HoshinoBot, ev: CQEvent):
+    if (not priv.check_priv(ev, priv.SUPERUSER)):
+        return
+    await bot.send(ev, "\n".join(GetDailyQueueFriendlyInfo(bool(ev.group_id))) or "Empty")
+
+
 def close_event_config(qqid):
     dic = get_sec()
-    dic[qqid]["daily_config"]["event_hard_135"] = "disabled"
-    dic[qqid]["daily_config"]["event_hard_24"] = "disabled"
-    dic[qqid]["daily_config"]["event_hard_boss_sweep"] = False
+    if dic[qqid]["daily_config"]["event_hard_config_reset"]:
+        dic[qqid]["daily_config"]["event_hard_135"] = "disabled"
+        dic[qqid]["daily_config"]["event_hard_24"] = "disabled"
+        dic[qqid]["daily_config"]["event_hard_boss_sweep"] = False
     dic[qqid]["daily_config"]["event_normal_5"] = "disabled"
     dic[qqid]["daily_config"]["event_normal_15"] = "disabled"
     save_sec(dic)
@@ -3645,17 +3345,21 @@ def close_event_config(qqid):
 
 def is_bot(qqid: str) -> bool:
     qqid = str(qqid)
-    return 1 <= len(qqid) <= 3 or not qqid.isdigit()
+    return 1 <= len(qqid) <= 4 or not qqid.isdigit()
 
 
 def DoDailyEnqueueWrapper(do_daily_func):
     async def wrapper(*args, **kwargs):
+        global gs_allow_do_daily
+        if (not gs_allow_do_daily):
+            raise RuntimeError(f'管理员已临时禁止清日常，以便重启完成更新。请稍等片刻（2-5min）后再尝试。')
+        
         qqid: str = args[0]
         if qqid in g_doDailyQueue:
             raise RuntimeError(f'{qqid}已有一个正在运行或排队的清日常实例')
 
-        g_doDailyQueue.add(qqid)
-        print(f'将{qqid}加入队列。当前队列：{g_doDailyQueue}')
+        g_doDailyQueue[qqid] = getNowtime()
+        print(f'将{qqid}加入队列。当前队列：{" | ".join(GetDailyQueueFriendlyInfo()) or "Empty"}')
 
         try:
             print(f'为{qqid}执行清日常')
@@ -3667,8 +3371,8 @@ def DoDailyEnqueueWrapper(do_daily_func):
             print(f'为{qqid}执行清日常成功')
             return res
         finally:
-            g_doDailyQueue.discard(qqid)
-            print(f'将{qqid}挪出队列。当前队列：{g_doDailyQueue}')
+            g_doDailyQueue.pop(qqid, None)
+            print(f'将{qqid}挪出队列。当前队列：{" | ".join(GetDailyQueueFriendlyInfo()) or "Empty"}')
     return wrapper
 
 
@@ -3726,7 +3430,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         pass  # await bot.send_private_msg(user_id=int(qqid), message=f'Doing daily routine for {nam}.')
     progress = []
     try:
-        await pcrClient.Login()
+        await pcrClient.Login(True)
         #await _account_verify(bot, ev, qqid, account_info, 2, None if ev is None else ev.user_id)
     except Exception as e:
         print_exc()
@@ -3744,16 +3448,13 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         progress.append(["clan_like", f'{await clan_like(account_info)}'])
     if config["room_accept_all"]:
         progress.append(["room_accept_all", f'{await room_accept_all(account_info)}'])
-    if config["explore"]:
-        progress.append(["explore", f'{await sweep_explore_exp(account_info)}'])
-        progress.append(["explore", f'{await sweep_explore_mana(account_info)}'])
+    if is_bot(qqid):
+        config["explore"] = "passed"
+    if config["explore"] not in ["disabled"]:
+        progress.append(["explore", f'{await sweep_explore(account_info, config["explore"], "EXP", "exp_quest", 21002000)}'])
+        progress.append(["explore", f'{await sweep_explore(account_info, config["explore"], "MANA", "gold_quest", 21001000)}'])
     if config["explore_cloister"]:
-        ret = await sweep_explore_cloister(account_info)
-        if "已自动关闭该功能" in ret:
-            dic = get_sec()
-            dic[qqid]["daily_config"]["explore_cloister"] = False
-            save_sec(dic)
-        progress.append(["explore_cloister", f'{ret}'])
+        progress.append(["explore_cloister", f'{await sweep_explore_cloister(account_info)}'])
     if config["free_gacha"]:
         progress.append(["free_gacha", f'{await get_gacha_free(account_info)}'])
     if config["free_gacha_special_event"] or is_bot(qqid):
@@ -3769,13 +3470,13 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     if config["buy_mana"]:
         progress.append(["buy_mana", f'{await buy_mana(account_info, config["buy_mana"])}'])
     if config["buy_dungeon_shop"]:
-        progress.append(["buy_dungeon_shop", f'{await buy_dungeon_shop(account_info, config["buy_dungeon_shop"])}'])
+        progress.append(["buy_dungeon_shop", f'{await buy_dungeon_shop(account_info, config["buy_dungeon_shop"], config["dungeon_flash_shop_limit"])}'])
     if config["buy_jjc_shop"]:
-        progress.append(["buy_jjc_shop", f'{await buy_jjc_shop(account_info, config["buy_jjc_shop"])}'])
+        progress.append(["buy_jjc_shop", f'{await buy_jjc_shop(account_info, config["buy_jjc_shop"], config["jjc_pjjc_shop_limit"])}'])
     if config["buy_pjjc_shop"]:
-        progress.append(["buy_pjjc_shop", f'{await buy_pjjc_shop(account_info, config["buy_pjjc_shop"])}'])
+        progress.append(["buy_pjjc_shop", f'{await buy_pjjc_shop(account_info, config["buy_pjjc_shop"], config["jjc_pjjc_shop_limit"])}'])
     if is_bot(qqid):
-        config["dungeon_sweep"] = "max"
+        config["dungeon_sweep"] = "passed"
     if config["dungeon_sweep"] not in ["disabled"]:
         progress.append(["dungeon_sweep", f'{await dungeon_sweep(account_info, config["dungeon_sweep"])}'])
     if config["jjc_reward"]:
@@ -3821,7 +3522,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11052009:3, 11052010:2, 11052011:5, 11052012:10, 11052013:10, 11052014:5})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11057012:4, 11057013:1, 11057014:6})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -3868,8 +3569,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         progress.append(["event_mission_accept", f'{await event_mission_accept(account_info)}'])
     if config["event_gacha"]:
         progress.append(["event_gacha", f'{await event_gacha(account_info)}'])
-    if config["flash_shop"]:
-        progress.append(["flash_shop", f'{await buy_flash_shop(account_info, (config["buy_exp_count"] > 0))}'])
+    if config["buy_flash_shop"]:
+        progress.append(["buy_flash_shop", f'{await buy_flash_shop(account_info, buy_exp_frag=(config["buy_exp_count"] > 0), equip_cnt_threshold=config["dungeon_flash_shop_limit"])}'])
     if is_bot(qqid):
         config["present_receive"] = "all"
     if config["present_receive"] in ["dated", "all"]:
@@ -3899,11 +3600,6 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         dic = get_sec()
         dic[qqid]["daily_config"]["give_gift"] = False
         save_sec(dic)
-    if config["read_chara_story"]:
-        progress.append(["read_chara_story", f'{await read_chara_story(pcrClient)}'])
-        dic = get_sec()
-        dic[qqid]["daily_config"]["read_chara_story"] = False
-        save_sec(dic)
     if config["read_main_story"]:
         progress.append(["read_main_story", f'{await read_main_story(account_info)}'])
         dic = get_sec()
@@ -3925,8 +3621,13 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         dic = get_sec()
         dic[qqid]["daily_config"]["read_trust_chapter"] = False
         save_sec(dic)
-    if config["eat_pudding"]:
-        progress.append(["eat_pudding", f'{await eat_pudding(pcrClient)}'])
+    if config["read_chara_story"]:
+        progress.append(["read_chara_story", f'{await read_chara_story(pcrClient)}'])
+        dic = get_sec()
+        dic[qqid]["daily_config"]["read_chara_story"] = False
+        save_sec(dic)
+    # if config["eat_pudding"]:
+    #     progress.append(["eat_pudding", f'{await eat_pudding(pcrClient)}'])
     progress.append([f'{nam}', f'{await get_basic_info(account_info)}'])
     progress.append([f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', "发送[清日常结果]可重新调取本记录"])
 
@@ -3983,7 +3684,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                     dfi.export(outp_pd_styled, save_path, table_conversion=table_conversion)
                 except Exception as e:
                     print(f'\n\n\n----{table_conversion} failed----')
-                    print(f'{e}')
+                    print_exc()
                     return False
                 return True
 
@@ -3992,9 +3693,10 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 return await loop.run_in_executor(None, pd2img, outp_pd_styled, save_path, table_conversion)
 
             if (await asyncio.create_task(pd2img_async(outp_pd_styled, save_path, 'selenium'))) == False:
-                if (await asyncio.create_task(pd2img_async(outp_pd_styled, save_path, 'chrome'))) == False:
+                # if (await asyncio.create_task(pd2img_async(outp_pd_styled, save_path, 'chrome'))) == False: # 有内存和存储占用泄漏
                     if (await asyncio.create_task(pd2img_async(outp_pd_styled, save_path, 'matplotlib'))) == False:
-                        raise Exception("所有图片导出媒介均遇异常")
+                        if ev is not None:
+                            await bot.send(ev, f'[CQ:reply,id={ev.message_id}]清日常完毕，但渲染结果图片失败')
 
             img = pil.Image.open(save_path)
             return img
@@ -4012,8 +3714,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
 
     except Exception as e:
         print_exc()
-        if ev is not None:
-            await bot.send(ev, f'[CQ:reply,id={ev.message_id}]清日常完毕，但渲染结果图片失败：{e}')
+        # if ev is not None:
+        #     await bot.send(ev, f'[CQ:reply,id={ev.message_id}]清日常完毕，但渲染结果图片失败：{e}')
 
 
 async def _do_daily(bot: HoshinoBot, ev: CQEvent):
@@ -4032,11 +3734,17 @@ async def _do_daily(bot: HoshinoBot, ev: CQEvent):
         if (not priv.check_priv(ev, priv.SUPERUSER)):
             await bot.finish(ev, f'{nam}禁止他人触发清日常，且您和该群均不在白名单中。程序中止。')
 
-    try:
-        await __do_daily(qqid, nam, bot, ev)
-    except Exception as e:
-        print_exc()
-        await bot.finish(ev, f'清日常模块异常终止：{e}')
+    if user_pcr_daily_semaphore.locked():
+        if hasattr(user_pcr_daily_semaphore, '_waiters'):
+            await bot.send(ev, f'{nam}的清日常请求已加入队列，前面剩余 {len(user_pcr_daily_semaphore._waiters or [])} 人。')
+        else:
+            await bot.send(ev, f'{nam}的清日常请求已加入队列，请稍等。')
+    async with user_pcr_daily_semaphore:
+        try:
+            await __do_daily(qqid, nam, bot, ev)
+        except Exception as e:
+            print_exc()
+            await bot.finish(ev, f'清日常模块异常终止：{e}')
 
 
 @sv.on_prefix(("#清日常", "＃清日常"))
@@ -4096,6 +3804,33 @@ def body_count():
     return f'{len(dic)}/{have_config}/{have_effect}'
 
 
+@sv.on_fullmatch(("临时关闭清日常", "临时禁止清日常"))
+async def close_temp(bot: HoshinoBot, ev:CQEvent):
+    if (not priv.check_priv(ev, priv.SUPERUSER)):
+        return
+    global gs_allow_do_daily
+    gs_allow_do_daily = False
+    await bot.send(ev, "Done")
+    
+    await GetDailyQueueInterface(bot, ev)
+    if len(GetDailyQueueFriendlyInfo()) > 0:
+        while len(GetDailyQueueFriendlyInfo()) > 0:
+            print(GetDailyQueueFriendlyInfo())
+            await asyncio.sleep(3)
+        await GetDailyQueueInterface(bot, ev) # empty
+        
+
+
+@sv.on_fullmatch(("临时开启清日常", "临时允许清日常", "开启清日常", "允许清日常"))
+async def open_temp(bot: HoshinoBot, ev:CQEvent):
+    if (not priv.check_priv(ev, priv.SUPERUSER)):
+        return
+    global gs_allow_do_daily
+    gs_allow_do_daily = True
+    bot.finish(ev, "Done")
+    await GetDailyQueueInterface(bot, ev)
+
+
 @sv.on_fullmatch(("开启定时清日常", "允许定时清日常"))
 async def open_cron(bot, ev):
     if (not priv.check_priv(ev, priv.SUPERUSER)):
@@ -4148,7 +3883,7 @@ async def clear_event_ticket(bot, ev):
     is_cleaning_event_ticket = True
 
     tasks = []
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(gs_semaphore_count)
 
     try:
         dic = get_sec()
@@ -4219,7 +3954,7 @@ async def buy_exp_and_stone_cron():
     dic = get_sec()
 
     tasks = []
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(gs_semaphore_count)
 
     for qqid in dic:
         if "daily_config" in dic[qqid]:
@@ -4263,7 +3998,7 @@ async def do_daily_cron():
         save_sec_backup(dic)
 
     tasks = []
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(gs_semaphore_count)
 
     for qqid in dic:
         if "daily_config" in dic[qqid]:
@@ -4286,58 +4021,13 @@ async def trigger_bot_cron(bot, ev):
         save_sec_backup(dic)
 
     tasks = []
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(gs_semaphore_count)
 
     for qqid in dic:
         if "daily_config" in dic[qqid]:
             if is_bot(qqid):
                 # if len(qqid) == 2 and 68 <= int(qqid) <= 90: # temp
                     tasks.append(_do_daily_cron(semaphore, qqid))
-
-    await asyncio.gather(*tasks)
-
-
-async def _change_bot_name(semaphore: asyncio.Semaphore, qqid: str, account_info: dict, new_name: str) -> None:
-    async with semaphore:
-        print(f'尝试将[{qqid}]更名为[{new_name}]')
-        try:
-            old_name = await query.get_username(account_info)
-        except Exception as e:
-            print(f'Fail. 尝试获取[{qqid}]当前pcr昵称失败：{e}')
-            return
-        if old_name == new_name:
-            print(f'Skip. [{qqid}]的当前pcr昵称已为[{new_name}]')
-            return
-        try:
-            await query.query(account_info, '/profile/rename', {"user_name": new_name})
-        except Exception as e:
-            print(f'Fail. 尝试将[{qqid}]更名为[{new_name}]失败：{e}')
-            return
-        print(f'Succeed. 将[{qqid}]更名为[{new_name}]成功，尝试更新本地缓存')
-        dic = get_sec()
-        dic[qqid]["pcrname"] = new_name
-        save_sec(dic)
-        print(f'Succeed. 将[{qqid}]更名为[{new_name}]成功，更新本地缓存成功')
-            
-            
-# @sv.on_fullmatch(("ebq改名")) # temp
-async def change_bot_name(bot, ev):
-    if (not priv.check_priv(ev, priv.SUPERUSER)):
-        return
-    await bot.send(ev, 'triggered')
-    dic = get_sec()
-    
-    if len(dic):
-        save_sec_backup(dic)
-
-    tasks = []
-    semaphore = asyncio.Semaphore(5)
-
-    for qqid in dic:
-        if "daily_config" in dic[qqid]:
-            if is_bot(qqid):
-                if len(qqid) <= 2:
-                    tasks.append(_change_bot_name(semaphore, qqid, dic[qqid], f'ebq{qqid}'))                    
 
     await asyncio.gather(*tasks)
 
@@ -4751,7 +4441,7 @@ async def change_support_unit(bot: HoshinoBot, ev: CQEvent):
     if support_unit_id == 1000:
         _, name, score = chara.guess_id(support_unit)
         await bot.send(ev, f'无法识别"{support_unit}"' + (f'您说的有{score}%可能是{name}' if score > 70 else ""))
-        raise Exception("参数错误")
+        raise Exception(f'无法识别"{support_unit}"' + (f'您说的有{score}%可能是{name}' if score > 70 else ""))
     return account_info, support_unit_id
 
 
