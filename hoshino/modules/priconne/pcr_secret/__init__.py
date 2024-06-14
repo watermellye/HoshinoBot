@@ -80,7 +80,7 @@ gs_semaphore_count = 4
 user_pcr_daily_semaphore = asyncio.Semaphore(gs_semaphore_count * 2)
 
 gs_allow_do_daily = True
-    
+
 
 @sv.on_fullmatch(("pcr帮助", "PCR帮助"))
 async def send_help(bot: HoshinoBot, ev: CQEvent):
@@ -681,7 +681,7 @@ async def room_accept_all(account_info) -> str:
     for item_id in outcome:
         outp.append(f'{item_id2name.get(item_id, item_id)}={outcome[item_id]}({stock[item_id]})')
     
-    have_kokoro_wallet = any([x for x in data["user_room_item_list"] if x["room_item_id"] == 2815])
+    have_kokoro_wallet = any(x for x in data["user_room_item_list"] if x["room_item_id"] == 2815)
     if not have_kokoro_wallet:
         try:
             buy_wallet_request = {
@@ -1340,10 +1340,13 @@ async def buy_mana(account_info, cnt=1):
         return f'Fail. 钻石购买mana失败：{e}'
 
 
-async def dungeon_sweep(account_info, mode: str):  # enum("passed", "max")
+async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: bool):  # enum("passed", "max")
     if mode == "disabled":
         return
-    dungeon_name = {
+    if mode not in ["passed", "max"]:
+        return f'Warn. 无法识别的mode：{mode}'
+
+    dungeon_id2name = {
         31001: "云海的山脉",
         31002: "密林的大树",
         31003: "断崖的遗迹",
@@ -1353,6 +1356,7 @@ async def dungeon_sweep(account_info, mode: str):  # enum("passed", "max")
         31007: "天上的浮城",
         31008: "沙瀑的底部"
     }
+
     try:
         data = await query.query(account_info, "/dungeon/info")
         enter_area_id = data["enter_area_id"]
@@ -1360,11 +1364,15 @@ async def dungeon_sweep(account_info, mode: str):  # enum("passed", "max")
         dungeon_cleared_area_id_list = data.get("dungeon_cleared_area_id_list", [])
     except Exception as e:
         return f'Fail. 获取今日地下城状态失败：{e}'
+
     if enter_area_id != 0:
-        msg = [f'当前已位于地下城 {dungeon_name.get(enter_area_id, enter_area_id)}']
+        if enter_area_id // 1000 == 32:
+            return 'Skip. 当前位于特别地下城，无法扫荡。'
+        
+        msg = [f'当前已位于地下城 {dungeon_id2name.get(enter_area_id, enter_area_id)}']
         if enter_area_id in dungeon_cleared_area_id_list:
             try:
-                res = await query.query(account_info, "/dungeon/skip", {"dungeon_area_id": enter_area_id})
+                _ = await query.query(account_info, "/dungeon/skip", {"dungeon_area_id": enter_area_id})
             except Exception as e:
                 msg.append(f'Fail. 尝试扫荡失败：{e}')
             else:
@@ -1372,19 +1380,23 @@ async def dungeon_sweep(account_info, mode: str):  # enum("passed", "max")
         else:
             msg.append(f'Warn. 您尚未通关过该等级，无法扫荡。')
         return " ".join(msg)
+   
     if rest_challenge_count == 0:
         return f'Skip. 今日地下城已挑战完毕'
     if len(dungeon_cleared_area_id_list) == 0:
         return f'Skip. 您未通关任何地下城地图'
-    if mode not in ["passed", "max"]:
-        return f'Warn. 无法识别的mode：{mode}'
+    
+    # if is_special_dungeon_time:
+    #     if not allow_dungeon_sweep_during_sp:
+    #         return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
+    
     if mode == "max":
-        max_dungeon_id = max(dungeon_name.keys())
+        max_dungeon_id = max(dungeon_id2name.keys())
         if max_dungeon_id not in dungeon_cleared_area_id_list:
-            return f'Warn. 您设置仅尝试扫荡当前开放的最高等级地下城({dungeon_name[max_dungeon_id]})，但尚未通关。'
+            return f'Warn. 您设置仅尝试扫荡当前开放的最高等级地下城({dungeon_id2name[max_dungeon_id]})，但尚未通关。'
 
-    dungeon_area_id = max(dungeon_cleared_area_id_list)
-    dungeon_area_name = dungeon_name.get(dungeon_area_id, dungeon_area_id)
+    dungeon_area_id = max([x for x in dungeon_cleared_area_id_list if x in dungeon_id2name])
+    dungeon_area_name = dungeon_id2name.get(dungeon_area_id, dungeon_area_id)
     # 不需要了
     # try:
     #     await query.query(account_info, "/dungeon/enter_area", {"dungeon_area_id": dungeon_area_id})
@@ -1749,10 +1761,6 @@ async def free_gacha_special_event(account_info):
         return 'Abort. 当前没有免费十连活动，已自动关闭该功能。'
     if data["campaign_info"]["fg10_last_exec_time"] == data["campaign_info"]["fg10_exec_cnt"] == 0:
         return 'Abort. 当前没有免费十连活动，已自动关闭该功能。'
-
-    for gacha in data["gacha_info"]:
-        print(gacha)
-        print(getGachaType(gacha))
 
     # 当前有免费十连活动
     remain_cnt = data["campaign_info"]["fg10_exec_cnt"]
@@ -3380,7 +3388,7 @@ def DoDailyEnqueueWrapper(do_daily_func):
 async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     dic = get_sec()
     account_info = dic[qqid]
-    pcrClient = PcrApi(account_info)
+    pcrClient = PcrApi(account_info) # 对 is_valid=False 的账号直接抛出异常
     if nam is None:
         nam = account_info.get("pcrname", account_info.get("name", qqid))
     if bot is None:
@@ -3430,7 +3438,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         pass  # await bot.send_private_msg(user_id=int(qqid), message=f'Doing daily routine for {nam}.')
     progress = []
     try:
-        await pcrClient.Login(True)
+        await pcrClient.Login(always_call_login_and_check=True)
         #await _account_verify(bot, ev, qqid, account_info, 2, None if ev is None else ev.user_id)
     except Exception as e:
         print_exc()
@@ -3478,7 +3486,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     if is_bot(qqid):
         config["dungeon_sweep"] = "passed"
     if config["dungeon_sweep"] not in ["disabled"]:
-        progress.append(["dungeon_sweep", f'{await dungeon_sweep(account_info, config["dungeon_sweep"])}'])
+        progress.append(["dungeon_sweep", f'{await dungeon_sweep(account_info, config["dungeon_sweep"], config["allow_dungeon_sweep_during_sp"])}'])
     if config["jjc_reward"]:
         progress.append(["jjc_reward", f'{await accept_jjc_reward(account_info)}'])
         progress.append(["jjc_reward", f'{await accept_pjjc_reward(account_info)}'])
@@ -3522,7 +3530,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11057012:4, 11057013:1, 11057014:6})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11058013:1, 11058014:1})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -3914,8 +3922,10 @@ def get_allow_cron() -> bool:
 async def __buy_exp_and_stone_cron(qqid: str) -> str:
     dic = get_sec()
     account_info = dic[qqid]
+    pcrClient = PcrApi(account_info) # 对 is_valid=False 的账号直接抛出异常
+    await pcrClient.Login(always_call_login_and_check=True)
+    
     config = dic[qqid]["daily_config"]  
-
     try:
         ret = await buy_exp_and_stone_shop(account_info, config["buy_exp_count"], config["buy_stone_count"])
         if "经验瓶阈值" in ret and "强化石阈值" in ret:

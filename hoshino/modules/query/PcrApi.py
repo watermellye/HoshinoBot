@@ -55,13 +55,13 @@ class PcrApi:
         self._record: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == self.Account)
 
 
-    async def Login(self, force: bool = False) -> None:
+    async def Login(self, still_try_login_even_if_record_is_invalid: bool = False, always_call_login_and_check: bool = False) -> None:
         """
         Raises:
             PcrApiException
         """
         try:
-            await self._pcrClient.LoginAndCheck(forceTry=force)
+            await self._pcrClient.LoginAndCheck(still_try_login_even_if_record_is_invalid=still_try_login_even_if_record_is_invalid, always_call_login_and_check=always_call_login_and_check)
         except Exception as e:
             raise PcrApiException from e
         if self._record is None:

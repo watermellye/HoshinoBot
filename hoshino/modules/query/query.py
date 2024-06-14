@@ -81,7 +81,7 @@ async def LoginAndCheck(client: PcrClient, forceTry: bool = False):
     Returns:
         bool: True=向数据库插入了新纪录，False=为数据库已有的记录
     """
-    is_new = await client.LoginAndCheck(forceTry=forceTry)
+    is_new = await client.LoginAndCheck(still_try_login_even_if_record_is_invalid=forceTry)
     if is_new:
         try:
             pcrName = await get_username({"account":client.biliSdkClient.account, "password":client.biliSdkClient.password}) # pcrName = await client.GetUsername()

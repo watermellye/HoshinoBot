@@ -65,7 +65,7 @@ async def EllyeAutoCaptchaVerifier():
             response = await client.get(url, timeout=60)
             response.raise_for_status()
             res = response.json()
-            assert res.get("code", -1) == 0, str(res)
+            assert res.get("code", -1) == 0, f'过码api返回结果不含code或code不为0；Raw output=[{res}]'
             return res["data"]
     except Exception as e:
         raise Exception(f"自动过码异常：{e}") from e

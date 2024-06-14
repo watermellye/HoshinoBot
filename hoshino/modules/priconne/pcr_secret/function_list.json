@@ -381,6 +381,18 @@
         "implemented": true,
         "default": "max"
     },
+    "allow_dungeon_sweep_during_sp": {
+        "brief": "特别地下城期间保持自动扫荡",
+        "cn": "特别地下城期间保持自动扫荡",
+        "description": "在特别地下城活动举办期间仍然保持扫荡地下城",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
     "jjc_reward": {
         "brief": "收取双场币",
         "cn": "收取双场币",
@@ -572,7 +584,7 @@
     "allin_normal_temp": {
         "brief": "预置权重刷图",
         "cn": "AllIn当期N图",
-        "description": "将所有剩余体力以4:1:6投入N57-12/13/14。此为临时功能，每月不定更新。",
+        "description": "将所有剩余体力以1:1投入N58-13/14。此为临时功能，每月不定更新。",
         "type": "bool",
         "candidate_value": [
             true,

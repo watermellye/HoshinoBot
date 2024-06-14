@@ -253,7 +253,7 @@ class PcrClient:
             raise e
             
 
-    async def LoginAndCheck(self, isFirstTry=True, forceTry=False) -> bool:
+    async def LoginAndCheck(self, isFirstTry=True, still_try_login_even_if_record_is_invalid=False, always_call_login_and_check=False) -> bool:
         """
         检查当前账号对象的状态。若有需要，自动调用登录模块。
         没有抛出异常就是检验通过。
@@ -269,12 +269,13 @@ class PcrClient:
             bool: True=向数据库插入了新纪录，False=为数据库已有的记录
         """
         
-        if forceTry == False:
+        if not still_try_login_even_if_record_is_invalid:
             pcrAccountInfoRecord: PcrAccountInfo = PcrAccountInfo.get_or_none(PcrAccountInfo.account == self.biliSdkClient.account)
             if pcrAccountInfoRecord is not None:
                 if pcrAccountInfoRecord.is_valid == False:
                     raise AssertionError(f'账号[{self.biliSdkClient.account}]被标记为不合法，终止登录。请重新交号。')
-            
+        
+        if not always_call_login_and_check:
             if self.needLoginAndCheck == False:
                 return
             

@@ -12,8 +12,14 @@ import time
 from os.path import dirname, join, exists
 from random import random
 from math import log
-
+from pathlib import Path
 from asyncio import Lock
+
+_gs_data_dir = Path(__file__).parent / "buffer"
+_gs_data_dir.mkdir(exist_ok=True)
+_gs_cache_filepath = _gs_data_dir / "buffer.json"
+if not _gs_cache_filepath.exists():
+    _gs_cache_filepath.write_text('{}', encoding='utf-8')
 
 querylock = Lock()
 logger = sv.logger
@@ -61,8 +67,8 @@ def findApproximateTeamResult(id_list):
 
     logger.info(f'    共有{len(result)}条记录')
     render = result2render(result, "approximation", id_list)
-    render = render[:200]
-    render = list(sorted(render, key=lambda x: x.get("val", -100), reverse=True))
+    if len(render) > 10:
+        render = list(sorted(render, key=lambda x: x.get("val", -100), reverse=True))[:10]
     return render
 
 
@@ -85,12 +91,7 @@ def result2render(result, team_type="normal", id_list=[]):
     "youshu":五个佑树 # 本函数不支持
     '''
     render = []
-    duplicated = set()
     for entry in result:
-        fingerprint = "".join([str(x) for x in ([c["id"] // 100 for c in entry["atk"]] + [c["id"] // 100 for c in entry["def"]])])
-        if fingerprint in duplicated:
-            continue
-        duplicated.add(fingerprint)
         # atk up down val: 都一样
         # team_type: approximation要手动算 nomal直接贴
         write_type = team_type
