@@ -3744,7 +3744,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11061012: 4, 11061014: 3})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11062003: 3, 11062005: 8, 11062006: 14, 11062007: 23})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:

@@ -624,7 +624,7 @@
     "allin_normal_temp": {
         "brief": "预置权重刷图",
         "cn": "AllIn当期N图",
-        "description": "将所有剩余体力以4:3投入N61-12/14。此为临时功能，每月不定更新。",
+        "description": "将所有剩余体力以3:8:14:23投入N62-3/5/6/7。此为临时功能，每月不定更新。",
         "type": "bool",
         "candidate_value": [
             true,

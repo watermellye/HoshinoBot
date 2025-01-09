@@ -13,6 +13,7 @@ from nonebot.message import CanceledException, Message
 import hoshino
 from hoshino import log, priv, trigger
 from hoshino.typing import *
+from hoshino.msghandler import _should_respond, is_group_in_whitelist
 
 try:
     import ujson as json
@@ -155,10 +156,13 @@ class Service:
             f'Service {self.name} is disabled at group {group_id}')
 
     def check_enabled(self, group_id):
+        if not is_group_in_whitelist(group_id):
+            return False
         return bool((group_id in self.enable_group) or (self.enable_on_default and group_id not in self.disable_group))
 
-
     def _check_all(self, ev: CQEvent):
+        if not _should_respond(ev):
+            return False
         gid = ev.group_id
         return self.check_enabled(gid) and not priv.check_block_group(gid) and priv.check_priv(ev, self.use_priv)
 
