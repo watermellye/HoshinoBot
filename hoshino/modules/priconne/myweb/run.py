@@ -185,12 +185,12 @@ async def config_page():
     return await render_template("404.html", message="找不到该用户")
 
 
-@auto_pcr_web.route('/login', methods=['GET'])
+@auto_pcr_web.route('/el', methods=['GET'])
 async def login_page():
     return await render_template("login.html")
 
 
-@auto_pcr_web.route('/api/login', methods=['POST'])
+@auto_pcr_web.route('/api/el', methods=['POST'])
 async def login():
     try:
         data = await request.form

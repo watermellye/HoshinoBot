@@ -37,7 +37,7 @@
 <script src="{{url_for('autopcr.static',filename='js/my-login.js')}}"></script>
 <script type="text/javascript">
     function password_login() {
-        $.post("/autopcr/api/login", { field_qq_id: $("#field_qq_id").val(), field_pcr_password: $("#field_pcr_password").val() }, function (ret) {
+        $.post("/autopcr/api/el", { field_qq_id: $("#field_qq_id").val(), field_pcr_password: $("#field_pcr_password").val() }, function (ret) {
             if (ret.statusCode != 200) {
                 suspend("alert-danger", "登陆失败 " + ret.message);
             } else {

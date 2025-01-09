@@ -131,6 +131,10 @@ async def TryLogin(biliAccount:str, biliPassword:str, qqid:int = None) -> Tuple[
             logger.info(f'登录失败：{res.get("message", "BCR汇报账号异常，请前往网页主站重新登录并进行验证")}')
             PcrAccountInfo.update(is_valid=False, update_time=str(datetime.now())).where(PcrAccountInfo.account == biliAccount).execute()
             raise Exception(f'登录失败：{res.get("message", "BCR汇报账号异常，请前往网页主站重新登录并进行验证")}')
+        if res.get("code", -1) == 900001:
+            logger.info(f'登录失败：{res.get("message", "account unknown error")}')
+            PcrAccountInfo.update(is_valid=False, update_time=str(datetime.now())).where(PcrAccountInfo.account == biliAccount).execute()
+            raise Exception(f'登录失败：{res.get("message", "account unknown error")}')
     
         if res.get("code", -1) == 0:
             logger.info(f'登录成功：uid=[{res["uid"]}] access_key=[{res["access_key"]}]')

@@ -46,7 +46,7 @@ __all__ = [
 ]
 
 _bot = None
-logger = log.new_logger('hoshino', config.DEBUG)
+logger = log.new_logger('hoshino', True)
 
 
 def init() -> HoshinoBot:

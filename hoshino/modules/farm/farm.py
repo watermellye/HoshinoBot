@@ -1316,6 +1316,8 @@ async def KickFromClan(leader_pcrid: int, member_pcrid: int) -> Output:
         else:
             return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的邀请列表成功')
     
+    FarmBind.update(permitted_clanid=0).where(FarmBind.pcrid == member_pcrid).execute()
+    FarmInfo.update(clanid_cache=0).where(FarmInfo.pcrid == member_pcrid).execute()
     return Output(OutputFlag.Skip, f'[{member_pcrid}]既不在公会中，也不在入会申请列表中，也不在邀请玩家列表中')
 
 

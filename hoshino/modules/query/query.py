@@ -664,7 +664,8 @@ def get_clan_donate_item_dict() -> dict:
     {
         "blue": [101011, 101071, ...],
         ...,
-        "purple": [115011, 125012, ...]
+        "purple": [115011, 125012, ...],
+        ...
     }
     '''
     clan_donate_item_id_path = join(curpath, 'data/clan_donate_item_dict.json')

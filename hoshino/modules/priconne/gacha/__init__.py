@@ -25,7 +25,7 @@ sv_help = f'''
 [查看卡池] 模拟卡池&出率
 [切换卡池] 更换模拟卡池
 '''.strip()
-sv = Service('gacha', help_=sv_help, bundle='pcr娱乐')
+sv = Service('gacha', help_=sv_help, bundle='pcr娱乐', enable_on_default=False)
 
 @sv.on_fullmatch('gacha帮助')
 async def gacha_help(bot: HoshinoBot, ev: CQEvent):
@@ -120,7 +120,7 @@ async def gacha_1(bot, ev: CQEvent):
 
     res = f'{await chara.get_icon_cqcode()} {chara.name} {"★"*chara.star}'
 
-    await silence(ev, silence_time)
+    # await silence(ev, silence_time)
     await bot.send(ev, f'素敵な仲間が増えますよ！\n{res}', at_sender=True)
 
 
@@ -154,7 +154,7 @@ async def gacha_10(bot, ev: CQEvent):
     if hiishi >= SUPER_LUCKY_LINE:
         await bot.send(ev, '恭喜海豹！おめでとうございます！')
     await bot.send(ev, f'素敵な仲間が増えますよ！\n{res}\n', at_sender=True)
-    await silence(ev, silence_time)
+    # await silence(ev, silence_time)
 
 
 @sv.on_prefix(gacha_tenjou_aliases, only_to_me=True)
@@ -218,7 +218,7 @@ async def gacha_tenjou(bot, ev: CQEvent):
 
     await bot.send(ev, '\n'.join(msg), at_sender=True)
     silence_time = (100*up + 50*(up+s3) + 10*s2 + s1) * 1
-    await silence(ev, silence_time)
+    # await silence(ev, silence_time)
 
 
 @sv.on_prefix('氪金')

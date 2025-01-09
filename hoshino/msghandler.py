@@ -6,6 +6,8 @@ from hoshino.typing import CQEvent
 
 @message_preprocessor
 async def handle_message(bot, event: CQEvent, _):
+    if len(event.message.extract_plain_text()) > 512:
+        raise CanceledException('ignore too long messages')
 
     if event.detail_type != 'group':
         pass # return

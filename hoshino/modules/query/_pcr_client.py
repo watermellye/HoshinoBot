@@ -227,7 +227,7 @@ class PcrClient:
                     except:
                         pass
                 if 'server_error' in data:
-                    print(f'pcrclient: {apiUrl} api failed {data}')
+                    print(f'pcrclient: {apiUrl} api failed: ({(data_headers.get("result_code", "unknown code"))}) {data}')
                     self.needLoginAndCheck = True
                     self._homeIndexCache = None
                     self._loadIndexCache = None
@@ -319,12 +319,11 @@ class PcrClient:
             PcrAccountInfo.create(pcrid=pcrid, account=self.biliSdkClient.account, password=self.biliSdkClient.password, update_time = str(datetime.now()), is_valid = True, pcrname_cache=str(self._viewerId), uid_cache=str(self._uid), access_key_cache=self._access_key)
             return True
         else:
-            if pcrAccountInfoRecord.uid_cache != self._uid or pcrAccountInfoRecord.access_key_cache != self._access_key:
-                pcrAccountInfoRecord.account = self.biliSdkClient.account
-                pcrAccountInfoRecord.password = self.biliSdkClient.password
-                pcrAccountInfoRecord.uid_cache = self._uid
-                pcrAccountInfoRecord.access_key_cache = self._access_key
-                pcrAccountInfoRecord.update_time = str(datetime.now())
-                pcrAccountInfoRecord.is_valid = True
-                pcrAccountInfoRecord.save()
+            pcrAccountInfoRecord.account = self.biliSdkClient.account
+            pcrAccountInfoRecord.password = self.biliSdkClient.password
+            pcrAccountInfoRecord.uid_cache = self._uid
+            pcrAccountInfoRecord.access_key_cache = self._access_key
+            pcrAccountInfoRecord.update_time = str(datetime.now())
+            pcrAccountInfoRecord.is_valid = True
+            pcrAccountInfoRecord.save()
             return False

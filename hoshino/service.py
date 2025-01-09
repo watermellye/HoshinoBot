@@ -193,6 +193,9 @@ class Service:
                         except TypeError as e:
                             return await func(ctx)
                     except CanceledException as e:
+                        # 用来同时放多个修饰器，只要满足其中一个就可以
+                        # @sv.on_message('group')
+                        # @sv.on_message('private')
                         pass
                     except Exception as e:
                         self.logger.error(f'{type(e)} occured when {func.__name__} handling message {ctx["message_id"]}.')

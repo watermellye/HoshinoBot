@@ -139,10 +139,12 @@ class RexTrigger(BaseTrigger):
         hoshino.logger.debug(f"Succeed to add rex trigger `{rex.pattern}`")
 
     def find_handler(self, event: CQEvent) -> "ServiceFunc":
+        plain_text = event.plain_text
+        norm_text = event.norm_text
+
         for rex, sfs in self.allrex.items():
             for sf in sfs:
-                text = event.norm_text if sf.normalize_text else event.plain_text
-                match = rex.search(text)
+                match = rex.search(norm_text if sf.normalize_text else plain_text)
                 if match:
                     event["match"] = match
                     yield sf

@@ -148,22 +148,28 @@ class DailyNumberLimiter:
         self.today = -1
         self.count = defaultdict(int)
         self.max = max_num
-
-    def check(self, key) -> bool:
+        
+    def _update(self) -> None:
         now = datetime.now(self.tz)
         day = (now - timedelta(hours=5)).day
         if day != self.today:
             self.today = day
             self.count.clear()
+            
+    def check(self, key) -> bool:
+        self._update()
         return bool(self.count[key] < self.max)
 
     def get_num(self, key):
+        self._update()
         return self.count[key]
 
     def increase(self, key, num=1):
+        self._update()
         self.count[key] += num
 
     def reset(self, key):
+        self._update()
         self.count[key] = 0
 
 

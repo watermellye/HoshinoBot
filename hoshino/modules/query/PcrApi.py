@@ -75,7 +75,8 @@ class PcrApi:
     class CallApiFullResponse:
         def __init__(self, data_header: dict = {}, data: dict = {}):
             self.data_header = data_header
-            self.data = data
+            self.data = json.loads(json.dumps(data, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
+
 
     async def CallApiFull(self, url: str, postData: dict = {}) -> CallApiFullResponse:
         """
@@ -113,6 +114,11 @@ class PcrApi:
     
     async def GetUsername(self) -> str:
         return (await self.GetLoadIndexRaw())["user_info"]["user_name"]
+    
+    
+    async def GetServerTime(self) -> int:
+        res = await self.CallApiFull("/gacha/index", {})
+        return int(res.data_header["servertime"])
     
     
     async def GetHomeIndexRaw(self) -> dict:
@@ -200,9 +206,7 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        res = await self.GetProfileRaw(target_viewer_id)
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
-        res = PcrApi.ProfileResponse(**res)
+        res = PcrApi.ProfileResponse(**(await self.GetProfileRaw(target_viewer_id)))
         PcrAccountInfo.update(pcrname_cache=res.user_info.user_name).where(PcrAccountInfo.pcrid == target_viewer_id).execute()
         return res
 
@@ -327,9 +331,7 @@ class PcrApi:
         Raises:
             PcrApiException
         """
-        res = await self.GetClanInfoRaw()
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
-        return PcrApi.ClanInfo(**res)
+        return PcrApi.ClanInfo(**(await self.GetClanInfoRaw()))
 
 
     async def GetClanId(self) -> int:
@@ -395,7 +397,6 @@ class PcrApi:
             PcrApiException
         """
         res = await self.CallApi("/clan/invite_user_list", {"clan_id": clan_id, "page": 0, "oldest_time": 0})
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.InviteUserResponse(**clan) for clan in res.get("list", [])]
     
     
@@ -425,7 +426,6 @@ class PcrApi:
         if home_index.get("have_clan_invitation", 0) == 0:
             return []
         res = await self.CallApi("/clan/invited_clan_list", {"page": 0})
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.InvitedClanResponse(**clan) for clan in res.get("list", [])]
         
     async def AcceptClanInvite(self, clan_id: int) -> None:
@@ -468,7 +468,6 @@ class PcrApi:
             PcrApiException
         """
         res = await self.CallApi("/clan/join_request_list", {"clan_id": clan_id, "page": 0, "oldest_time": 0})
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.ClanJoinRequestResponse(**clan) for clan in res.get("list", [])]
 
     async def RejectClanJoinRequest(self, clan_id: int, applicant_pcrid: int) -> None:
@@ -551,7 +550,6 @@ class PcrApi:
             PcrApiException
         """
         res = (await self.GetLoadIndexRaw()).get("unit_list", [])
-        res = json.loads(json.dumps(res, ensure_ascii=False)) # pcr有时会返回None:1。将所有key转为str，避免**clan报错
         return [PcrApi.UnitInfoResponse(**x) for x in res]
 
 
@@ -705,6 +703,113 @@ class PcrApi:
         """
         return [PcrApi.EventStatus(**x) for x in (await self.GetLoadIndexRaw()).get("event_statuses", [])]
 
+    class LoadIndexGachaResidentInfoResponse(BaseModel):
+        exchange_num: int
+        max_exchange_num: int
+        end_time: int
+        original_gacha_id: int
+        gacha_point_info: Dict
+        # "gacha_point_info": {
+        #     "exchange_id": 999999,
+        #     "current_point": 9,
+        #     "max_point": 120
+        # }
+        supply_unit_id_list: List[int]
+        server_time: int
+        
+    async def GetLoadIndexGachaResidentInfo(self) -> Optional[LoadIndexGachaResidentInfoResponse]:
+        """
+        Raises:
+            PcrApiException
+        """
+        res = await self.CallApiFull("/load/index", {'carrier': 'OPPO'})
+        load_index_raw = res.data
+
+        if "resident_info" not in load_index_raw:
+            return None
+        
+        resident_info = load_index_raw["resident_info"]
+        resident_info["server_time"] = res.data_header["servertime"]
+        
+        return PcrApi.LoadIndexGachaResidentInfoResponse(**resident_info)
+
+    class RecommendUnit(BaseModel):
+        unit_id: int
+        display_order: int
+
+    class GachaInfo(BaseModel):
+        null: int
+        id: int
+        type: int
+        start_time: int
+        end_time: int
+        cost_num_single: int
+        ticket_id: int
+        free_gacha_interval_time: int
+        discount_price: int
+        exchange_id: int
+        ticket_id_10: int
+        original_gacha_id: int
+        url_param: str
+        free_exec_times: int
+        last_free_gacha_time: int
+        discount_exec_times: int
+        last_discount_gacha_time: int
+        recommend_unit: List['PcrApi.RecommendUnit']
+
+    class FreeGachaInfo(BaseModel):
+        fg1_exec_cnt: int
+        fg1_last_exec_time: int
+        fg10_exec_cnt: int
+        fg10_last_exec_time: int
+
+    class GachaResidentInfoResponse(BaseModel):
+        gacha_info: List['PcrApi.GachaInfo']
+        free_gacha_info: 'PcrApi.FreeGachaInfo'
+        exchange_num: int
+        max_exchange_num: int
+
+    async def GetGachaResidentInfo(self) -> GachaResidentInfoResponse:
+        """
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.GachaResidentInfoResponse(**(await self.CallApi("/gacha/resident")))
+    
+    class GachaExecRequest(BaseModel):
+        gacha_id: int = Field(..., description="奖池ID")
+        gacha_times: int = Field(..., description="单抽=1，十连抽=10")
+        exchange_id: int = Field(..., description="抽取此池所用的物品的ID（奖池信息里会写）")
+        draw_type: int = Field(..., description="普通免费碎片扭蛋=1 150钻单抽/1500钻抽十连=2 单抽券/十连券单抽=3 免费十连=6 付费50钻=4 付费1500钻抽星3=<?> 特别凭证扭蛋=9005(不知道是否会变)")
+        current_cost_num: int = Field(..., description="抽取此池所用的物品的当前剩余数量（注意：不是使用数量）（每日免费碎片扭蛋=-1 钻石抽=剩余钻石数量 单抽券抽=剩余单抽券数量 免费十连抽=剩余免费十连次数")
+        campaign_id: int = Field(..., description='每日免费碎片扭蛋=0 特别凭证扭蛋=0 其他=/gacha/index["campaign_info"]["campaign_id"]')
+    
+    class ExchangeData(BaseModel):
+        unit_id: str
+        rarity: str
+        count: str
+
+    class GachaPointInfo(BaseModel):
+        exchange_id: int
+        current_point: int
+        max_point: int
+
+    class UserGold(BaseModel):
+        gold_id_free: int
+        gold_id_pay: int
+
+    class GachaExecResponse(BaseModel):
+        #reward_info_list: List['PcrApi.reward']
+        reward_info_list: List[Dict]
+        gacha_point_info: 'PcrApi.GachaPointInfo'
+        user_gold: 'PcrApi.UserGold'
+    
+    async def GachaExec(self, request: GachaExecRequest) -> GachaExecResponse:
+        """
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.GachaExecResponse(**(await self.CallApi("/gacha/exec", request.model_dump_json())))
 
     class EatPuddingGameCookingInfo(BaseModel):
         frame_id: int = Field(..., description="坑位，1~24")
@@ -722,7 +827,6 @@ class PcrApi:
         drama_id: int
         read_status: bool
 
-    # EatPuddingGameInfoResponse model with nested structures
     class EatPuddingGameInfoResponse(BaseModel):
         psy_setting: Dict
         cooking_status: List['PcrApi.EatPuddingGameCookingInfo']
@@ -760,3 +864,267 @@ class PcrApi:
         if 100000 <= chara_id <= 999999:
             chara_id //= 100
         return f'[{chara.fromid(chara_id).name}]({chara_id})'
+    
+    class travel_quest(BaseModel):
+        travel_id: int = Field(..., description="第几次新发起的出征", example=10)
+        travel_quest_id: int = Field(..., description="探险目标地图", example=11001003)
+        travel_start_time: int # 1730900178
+        travel_end_time: int # 1731411892 # endtime不会随着decrease_time改变
+        total_lap_count: int = Field(..., description="当前出征完成时循环的次数", example=14)
+        decrease_time: int # 0 # 3600
+        received_count: int = Field(..., description="当前出征已收菜的次数", example=9)
+        total_power: int = Field(..., description="队伍总战力", example=543281)
+        travel_deck: List[int] = Field(..., description="出征阵容。1-10个元素，每个元素为6位ID。", example=[122901, 107101, 106801, 103201, 100301, 102201, 102101, 101101, 104401, 104001])
+
+    class travel_quest_in_response(BaseModel):
+        travel_quest_id: int
+        travel_id: int
+        travel_start_time: int
+        travel_end_time: float # 1731411892.0 # 我们cy程序员是这样的
+        total_lap_count: int
+        decrease_time: int # 0 # 3600
+        received_count: int
+        total_power: int
+        # 没有 travel_deck
+    
+    class top_event(BaseModel):
+        top_event_appear_id: int = Field(..., description="第几次事件") # 25
+        event_group: int # 1
+        top_event_id: int # 3001 # 4005 # 4011
+        top_event_pos_id: int # 8 # 4 # 5
+        top_event_rarity: int # 1
+        top_event_choice_flag: int # 0/1 # 当0时，choice_number应为0；当1时，choice_number应为1/2
+        # top_event_choice_flag为1的事件如下：
+        # top_event_id=4007：choice_number=1：60% 获得 3 金装，40% 获得 1 金装；choice_number=2：总是获得 2 金装。
+        # top_event_id=4009：choice_number=1：30% 获得 1000 特别武器币，70% 获得 200 币；choice_number=2：总是获得 400 币。
+        top_event_skin_id_list: List[int] # [103011, 103711] # [118111] # [105211]
+        
+    class travel__top(BaseModel):
+        travel_quest_list: List['PcrApi.travel_quest'] = []
+        appear_secret_quest_list: list = [] # 目前为 []
+        top_event_list: List['PcrApi.top_event'] = []
+        remain_daily_retire_count: int = Field(..., description="当日剩余可撤退次数", example=10)
+        priority_unit_list: List[int] = Field(default_factory=list, description="碎片优先角色。0-15个元素，每个元素为6位ID。")
+        remain_daily_decrease_count_ticket: int = Field(..., description="当日剩余可使用券缩短时间次数", example=36)
+        remain_daily_decrease_count_jewel: int = Field(..., description="当日剩余可使用宝石缩短时间次数", example=36)
+        ex_equip_id_list: List[int] = Field(default_factory=list, description="仅当get_ex_equip_album_flag=1时响应中包含此字段", example=[4101101, 4101102, ..., 4305302])
+        ex_event_still_id_list: List[int] = Field(default_factory=list, description="至今为止发现的回忆事件列表") # [8000001, ...]
+        # campaign_list: list = Field(default_factory=list)
+
+    async def travel__top_async(self, travel_area_id: int, get_ex_equip_album_flag: int = 1) -> travel__top:
+        """
+        Args:
+            travel_area_id (int): 目前只有 11001(朱庇特树海)
+            get_ex_equip_album_flag (int): 0/1
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.travel__top(**(await self.CallApi("/travel/top", {"travel_area_id": travel_area_id, "get_ex_equip_album_flag": get_ex_equip_album_flag})))
+
+    class ex_equip(BaseModel):
+        serial_id: int # 390
+        ex_equipment_id: int # 4110301
+        enhancement_pt: int # 0
+        rank: int # 0
+        protection_flag: int # 1
+
+    class reward(BaseModel):
+        id: int
+        type: int
+        count: int
+        stock: int
+        received: int
+        ex_equip: Optional['PcrApi.ex_equip'] = None # 有此字段的 id 示例：4110301
+        # exchange_data: Optional['PcrApi.ExchangeData'] = None # 抽奖抽到旧角色，自动变为母猪石时有此字段
+
+    class user_jewel(BaseModel):
+        free_jewel: int # 351192
+        jewel: int # 2648
+    
+    class user_gold(BaseModel):
+        gold_id_free: int # 984007926
+        gold_id_pay: int # 47258
+
+    class travel__receive_top_event_reward(BaseModel):
+        reward_list: List['PcrApi.reward']
+        drama_id: int # 0
+        user_jewel: 'PcrApi.user_jewel'
+        user_gold: 'PcrApi.user_gold'
+        
+    async def travel__receive_top_event_reward_async(self, top_event_appear_id: int, choice_number: int) -> travel__receive_top_event_reward:
+        """
+        Args:
+            top_event_appear_id (int): 25
+            choice_number (int): 当 top_event_choice_flag 为 0 时，choice_number 应为 0；当为 1 时，choice_number 应为1/2。
+                4007 事件：choice_number=1：60% 获得 3 金装，40% 获得 1 金装；choice_number=2：总是获得 2 金装。
+                4009 事件：choice_number=1：30% 获得 1000 特别武器币，70% 获得 200 币；choice_number=2：总是获得 400 币。
+                其余事件：choice_number=0。
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.travel__receive_top_event_reward(**(await self.CallApi("/travel/receive_top_event_reward", {"top_event_appear_id": top_event_appear_id, "choice_number": choice_number})))
+
+    # 后续测试
+    class ex_auto_recycle_option(BaseModel):
+        rarity: list # []
+        frame: list # []
+        category: list # []
+
+    # 探险回忆事件
+    class appear_event(BaseModel):
+        still_id: int = Field(..., description="回忆事件ID") # 8000002
+        reward_list: List['PcrApi.reward']
+    
+    # 临时命名
+    class travel_result_item(BaseModel):
+        travel_quest_id: int # 见 travel_quest.travel_quest_id
+        travel_id: int # 见 travel_quest.travel_id
+        lap_count: int # 1
+        acquired_gold: int # 30000
+        appear_event_list: List['PcrApi.appear_event'] # 无内容时返回 []，有内容时返回 { "null": 1, "0": { ... }, "1": { ... } } 
+        reward_list: List['PcrApi.reward']
+        
+        @validator('appear_event_list', pre=True, always=True)
+        def convert_appear_event_list(cls, v):
+            if isinstance(v, dict):
+                v.pop('null', None)
+                # 只提取 "0", "1", ... 等键的值，并返回为列表
+                return list(v.values())
+            return v
+        
+    class travel__receive_all(BaseModel):
+        travel_result: List['PcrApi.travel_result_item']
+        # travel_quest_list: list # []
+        user_gold: 'PcrApi.user_gold'
+        # campaign_list: list # []
+        
+    async def travel__receive_all_async(self, ex_auto_recycle_option: ex_auto_recycle_option) -> travel__receive_all:
+        """
+        没有可以确认归来的队伍时，调用此接口会抛出异常：data_headers.result_code=205, data={'server_error': {'status': 3, 'title': '错误提示', 'message': '发生了错误。\\n回到标题界面。'}}
+        
+        Args:
+            ex_auto_recycle_option (ex_auto_recycle_option): 自动分解设定。全部字段留空表示不分解
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.travel__receive_all(**(await self.CallApi("/travel/receive_all", {"ex_auto_recycle_option": json.loads(ex_auto_recycle_option.model_dump_json())})))
+
+    # 探险缩短时间次数
+    class decrease_time_item(BaseModel):
+        jewel: int = Field(..., description="使用宝石缩短时间次数") # 0~36
+        item: int = Field(..., description="使用券缩短时间次数") # 0~36
+
+    class start_travel_quest(BaseModel):
+        travel_quest_id: int # 见 travel_quest.travel_quest_id
+        travel_deck: List[int] # 见 travel_quest.travel_deck
+        decrease_time_item: 'PcrApi.decrease_time_item'
+        total_lap_count: int = Field(..., description="出征循环次数") # 1~5
+
+    class add_lap_travel_quest(BaseModel):
+        travel_id: int # 见 travel_quest.travel_id
+        add_lap_count: int = Field(..., description="追加循环次数") # 1~4
+
+    class action_type(BaseModel):
+        value__: int = Field(..., description="从地图中选中单个目的地出发=1 从一键确认归来面板中归来后重新出发=2 从一键出发面板中出发=3（即使只出发一队） 从一键确认归来面板中追加=8 从一键确认归来面板中既有重新出发又有追加=9")
+
+    class current_currency_num(BaseModel):
+        jewel: int = Field(..., description="用户拥有的免费+付费宝石总量") # 351192
+        item: int = Field(..., description="用户拥有的券总量") # 137
+
+    class campaign(BaseModel):
+        travel_id: int # 见 travel_quest.travel_id
+        start_lap: int = Field(..., description="当前正在第几轮循环") # >=1
+        end_lap: int = Field(..., description="总共循环几轮后结束") # >=start_lap
+        # campaign_id_list: list # [] # TODO: figure it out
+
+    class travel__start(BaseModel):
+        travel_quest_list: List['PcrApi.travel_quest_in_response']
+        # item_list: Optional[List['PcrApi.item']] = None # [{"id": 23002, "type": 2, "count": 0, "stock": 161}]
+        remain_daily_decrease_count_ticket: Optional[int] = None # 见 travel__top.remain_daily_decrease_count_ticket。如果未使用券则无此字段
+        remain_daily_decrease_count_jewel: Optional[int] = None # 见 travel__top.remain_daily_decrease_count_jewel。如果未使用宝石则无此字段
+        campaign_list: List['PcrApi.campaign']
+
+    async def travel__start_async(
+        self, 
+        start_travel_quest_list: List[start_travel_quest],
+        add_lap_travel_quest_list: List[add_lap_travel_quest],
+        start_secret_travel_quest_list: list, # [] # TODO: figure it out
+        action_type: action_type,
+        current_currency_num: current_currency_num
+    ) -> travel__start:
+        """
+        Raises:
+            PcrApiException
+        """
+        request_data = {
+            "start_travel_quest_list": [quest.model_dump() for quest in start_travel_quest_list],
+            "add_lap_travel_quest_list": [quest.model_dump() for quest in add_lap_travel_quest_list],
+            "start_secret_travel_quest_list": start_secret_travel_quest_list,
+            "action_type": action_type.model_dump(),
+            "current_currency_num": current_currency_num.model_dump()
+        }
+        response = await self.CallApi("/travel/start", request_data)
+        return PcrApi.travel__start(**response)
+
+    class quest(BaseModel):
+        quest_id: int # N1-1: 11001001
+        clear_flg: int = Field(..., description="几星通关（[0,3]），其中0星为未通关")
+        result_type: int # home_index 中的均为 2
+        daily_clear_count: int = Field(..., description="当日通关次数")
+        daily_recovery_count: int = Field(..., description="当日回复次数")
+    
+    async def u_get_quest_list_async(self) -> List[quest]:
+        """
+        Raises:
+            PcrApiException
+        """
+        home_index = await self.GetHomeIndexRaw()
+        return [PcrApi.quest(**quest) for quest in home_index.get("quest_list", [])]
+    
+    async def u_get_quest_dict_async(self) -> Dict[int, quest]:
+        """
+        Raises:
+            PcrApiException
+        Returns:
+            int: quest_id
+        """
+        return {quest.quest_id: quest for quest in await self.u_get_quest_list_async()}
+    
+    async def u_get_quest_async(self, quest_id: int) -> Optional[quest]:
+        """
+        Raises:
+            PcrApiException
+        """
+        quest_list = await self.u_get_quest_list_async()
+        return next((x for x in quest_list if x.quest_id == quest_id), None)
+    
+    async def u_is_quest_cleared_async(self, quest_id: int) -> bool:
+        """
+        Raises:
+            PcrApiException
+        """
+        quest = await self.u_get_quest_async(quest_id)
+        return quest is not None and quest.clear_flg > 0
+    
+    async def u_get_free_jewel_async(self) -> int:
+        """
+        Raises:
+            PcrApiException
+        """
+        return (await self.GetLoadIndexRaw()).get("user_jewel", {}).get("free_jewel", 0)
+    
+    async def u_get_paid_jewel_async(self) -> int:
+        """
+        Raises:
+            PcrApiException
+        """
+        return (await self.GetLoadIndexRaw()).get("user_jewel", {}).get("paid_jewel", 0)
+    
+    async def u_get_total_jewel_async(self) -> int:
+        """
+        Raises:
+            PcrApiException
+        """
+        load_index = await self.GetLoadIndexRaw()
+        user_jewel = load_index.get("user_jewel", {})
+        return user_jewel.get("free_jewel", 0) + user_jewel.get("paid_jewel", 0)
