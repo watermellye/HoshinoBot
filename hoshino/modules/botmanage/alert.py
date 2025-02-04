@@ -28,13 +28,13 @@ async def ban_me_alert(session: NoticeSession):
             await session.bot.send_private_msg(self_id=self_id, user_id=coffee, message='已自动退出群聊')
 
 
-@on_request('friend')
-async def add_friend(session: RequestSession):
-    await sleep(60)
-    await session.approve()
+# @on_request('friend')
+# async def add_friend(session: RequestSession):
+#     await sleep(60)
+#     await session.approve()
 
 
-@on_request('group.invite')
-async def add_group(session: RequestSession):
-    await sleep(60)
-    await session.approve()
+# @on_request('group.invite')
+# async def add_group(session: RequestSession):
+#     await sleep(60)
+#     await session.approve()

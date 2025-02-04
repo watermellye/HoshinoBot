@@ -43,4 +43,4 @@ async def pull_chara(sess: CommandSession = None):
 
 
 sucmd('update-pcr-chara', force_private=False, aliases=('重载花名册', '更新花名册'))(pull_chara)
-sv.scheduled_job('cron', hour=5, jitter=300)(pull_chara)
+# sv.scheduled_job('cron', hour=5, jitter=300)(pull_chara)

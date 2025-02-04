@@ -28,6 +28,7 @@ sv = Service(
 [猜头像] 猜猜bot随机发送的头像的一小部分来自哪位角色
 [猜头像排行] 显示小游戏的群排行榜(只显示前十)
 """.strip(),
+    enable_on_default=False
 )
 
 
