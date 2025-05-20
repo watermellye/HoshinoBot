@@ -164,7 +164,10 @@ class Service:
         if not _should_respond(ev):
             return False
         gid = ev.group_id
-        return self.check_enabled(gid) and not priv.check_block_group(gid) and priv.check_priv(ev, self.use_priv)
+        if gid:
+            return self.check_enabled(gid) and not priv.check_block_group(gid) and priv.check_priv(ev, self.use_priv)
+        else:
+            return priv.check_priv(ev, self.use_priv)
 
     async def get_enable_groups(self) -> dict:
         """获取所有启用本服务的群

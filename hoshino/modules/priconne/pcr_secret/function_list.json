@@ -225,7 +225,7 @@
     "free_gacha_special_event": {
         "brief": "免费十连",
         "cn": "抽取活动免费十连",
-        "description": "抽取免费十连。在没有免费十连的时期会自动关闭。",
+        "description": "抽取免费十连。在没有免费十连的时期会自动关闭。优先级：夏日庆典>公主庆典>自选精选>精选>附奖>白金。其中，对于需要选择角色的池子，ebq 不会改变你的选择。如果你没有进行选择，ebq 会自动选定。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -444,9 +444,9 @@
         "default": 0
     },
     "event_hard_config_reset": {
-        "brief": "此设置为其他功能的附加设置，不需要brief字段",
+        "brief": "（此设置为其他功能的附加设置，不使用此字段）",
         "cn": "无活动时重置H图设定",
-        "description": "在没有任何活动时，以下刷活动Hard图和Hard Boss的设定值自动置为关闭（disabled）。注意：在没有任何活动时，下方AllIn活动N图的设定总会自动关闭，不受本项控制。",
+        "description": "在没有任何活动时，以下刷活动Hard图和扫荡Boss的设定值自动置为关闭（disabled）。注意：在没有任何活动时，下方AllIn活动N图的设定总会自动关闭，不受本项控制。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -483,10 +483,22 @@
         "implemented": true,
         "default": "disabled"
     },
+    "event_vh_boss_sweep": {
+        "brief": "扫荡活动VH Boss",
+        "cn": "扫荡活动VH Boss",
+        "description": "",
+        "type": "bool",
+        "candidate_value": [
+            true,
+            false
+        ],
+        "implemented": true,
+        "default": false
+    },
     "event_hard_boss_sweep": {
         "brief": "扫荡活动HardBoss",
         "cn": "扫荡活动HardBoss",
-        "description": "0=不扫荡，1=扫荡1次，max=清空扫荡券，max-1=留1次扫荡机会，max-2=留2次",
+        "description": "0=不扫荡，1=扫荡1次，max=清空扫荡券，max-1=留1次扫荡机会，max-2=留2次。",
         "type": "enum",
         "candidate_value": [
             0,
@@ -498,10 +510,10 @@
         "implemented": true,
         "default": false
     },
-    "xinsui_5": {
-        "brief": "刷心碎5",
-        "cn": "心碎5刷取次数",
-        "description": "若选择大于5，将自动重置。（下同）",
+    "xinsui_all": {
+        "brief": "刷心碎",
+        "cn": "每个心碎本刷取次数",
+        "description": "会对所有三星通关的心碎本进行刷取。若选择大于5，将自动重置。目前共开放了6个心碎本。",
         "type": "enum",
         "candidate_value": [
             0,
@@ -513,85 +525,10 @@
         "implemented": true,
         "default": 0
     },
-    "xinsui_4": {
-        "brief": "刷心碎4",
-        "cn": "心碎4刷取次数",
-        "description": "若选择大于5，将自动重置。（下同）",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            5,
-            10,
-            15,
-            20
-        ],
-        "implemented": true,
-        "default": 0
-    },
-    "xinsui_3": {
-        "brief": "刷心碎3",
-        "cn": "心碎3刷取次数",
-        "description": "",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            5,
-            10,
-            15,
-            20
-        ],
-        "implemented": true,
-        "default": 0
-    },
-    "xinsui_2": {
-        "brief": "刷心碎2",
-        "cn": "心碎2刷取次数",
-        "description": "",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            5,
-            10,
-            15,
-            20
-        ],
-        "implemented": true,
-        "default": 0
-    },
-    "xinsui_1": {
-        "brief": "刷心碎1",
-        "cn": "心碎1刷取次数",
-        "description": "",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            5,
-            10,
-            15,
-            20
-        ],
-        "implemented": true,
-        "default": 0
-    },
-    "xingqiubei_2": {
-        "brief": "刷星球杯2",
-        "cn": "星球杯2刷取次数",
-        "description": "",
-        "type": "enum",
-        "candidate_value": [
-            0,
-            5,
-            10,
-            15,
-            20
-        ],
-        "implemented": true,
-        "default": 0
-    },
-    "xingqiubei_1": {
-        "brief": "刷星球杯1",
-        "cn": "星球杯1刷取次数",
-        "description": "",
+    "xingqiubei_all": {
+        "brief": "刷星球杯",
+        "cn": "每个星球杯本刷取次数",
+        "description": "会对所有三星通关的星球杯本进行刷取。若选择大于5，将自动重置。目前共开放了2个星球杯本。",
         "type": "enum",
         "candidate_value": [
             0,
@@ -624,7 +561,7 @@
     "allin_normal_temp": {
         "brief": "预置权重刷图",
         "cn": "AllIn当期N图",
-        "description": "将所有剩余体力以3:8:14:23投入N62-3/5/6/7。此为临时功能，每月不定更新。",
+        "description": "将所有剩余体力以6:1:1:1:3投入N65-1~5。此为临时功能，每月不定更新。",
         "type": "bool",
         "candidate_value": [
             true,

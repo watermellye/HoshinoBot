@@ -33,6 +33,7 @@
                                         <td class="product-delete">
                                             <button class="btn" id="do_daily">触发清日常</button>
                                             <button class="btn" onclick="OpenDailyResult()">清日常结果</button>
+                                            <!-- <button class="btn" onclick="open_change_password_page()">更新密码</button> -->
                                         </td>
                                         <td class="product-name" id="order_item_data3">
                                             <h4 id="qq_name"></h4>
@@ -147,6 +148,10 @@
 
     function OpenDailyResult() {
         window.open(window.location.href.replace("config", "result"));
+    }
+    function open_change_password_page()
+    {
+        window.open(window.location.href.replace("config", "update_pwd"));
     }
     function selectOnChange(select) {
         update_new();

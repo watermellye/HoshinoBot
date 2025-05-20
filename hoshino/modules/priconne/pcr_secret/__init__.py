@@ -130,29 +130,10 @@ def save_sec(dic):
 def get_sec() -> dict:
     with IOLock:
         dic = {}
-        if not exists(sec) and exists(join(curpath, 'secret.txt')):
-            with open(join(curpath, 'secret.txt'), encoding="utf-8") as fp:
-                for line in fp:
-                    # QQ号 名称 账号 密码 状态
-                    line = line.strip()
-                    a = line.split('\t')
-                    if len(a) == 1 and len(line.split(' ') > 1):
-                        a = line.split(' ')
-                    if len(a) == 4:
-                        dic[a[0]] = {
-                            "name": a[1],
-                            "account": a[2],
-                            "password": a[3]
-                        }
-            save_sec(dic)
-
         if exists(sec):
-            try:
-                with open(sec, "r", encoding="utf-8") as fp:
-                    dic = load(fp)
-            except:
-                with open(sec, "r", encoding="gb2312") as fp:
-                    dic = load(fp)
+            # let it crash if the file is not valid
+            with open(sec, "r", encoding="utf-8") as fp:
+                dic = load(fp)
         return dic
 
 
@@ -829,7 +810,8 @@ async def room_furniture_upgrade(account_info):
         1211: "旷世之蛋和加量米饭",
         2206: "最高级龙尾关东煮",
         2810: "天露金甘水",
-        2817: "大地仙人掌蜜汁松饼"
+        2817: "大地仙人掌蜜汁松饼",
+        2831: "深海直邮的无限海鲜箱"
     }  # 所以143是什么
 
     try:
@@ -1450,14 +1432,15 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         return f'Warn. 无法识别的mode：{mode}'
 
     dungeon_id2name = {
-        31001: "云海的山脉",
-        31002: "密林的大树",
-        31003: "断崖的遗迹",
-        31004: "沧海的孤塔",
-        31005: "毒瘴的暗棱",
-        31006: "绿龙的骸岭",
-        31007: "天上的浮城",
-        31008: "沙瀑的底部"
+        31001: "云海的山脉(N)",
+        31002: "密林的大树(H)",
+        31003: "断崖的遗迹(VH)",
+        31004: "沧海的孤塔(EX)",
+        31005: "毒瘴的暗棱(EX2)",
+        31006: "绿龙的骸岭(EX3)",
+        31007: "天上的浮城(EX4)",
+        31008: "沙瀑的底部(EX5)",
+        31009: "绀碧的王城(EX6)"
     }
 
     try:
@@ -1793,6 +1776,7 @@ class GachaType(IntEnum):
     白金 = 2 # 从开服就不变
     精选 = 3  # 新池
     附奖 = 31  # 复刻池
+    自选精选 = 32
     星3确定 = 7
     公主庆典 = 8
     限定星3必得 = 9
@@ -1817,6 +1801,8 @@ def getGachaType(gacha: dict) -> GachaType:
         return GachaType.星3确定
     if gacha.get("cost_num_single", -1) == 1500 and str(gacha.get("id", 0))[:2] == '11':
         return GachaType.限定星3必得
+    if gacha.get("cost_num_single", -1) == 150 and str(gacha.get("id", 0))[0] == '3' and ("select_pickup_slot_num" in gacha or "priority_list" in gacha):
+        return GachaType.自选精选
     
     recommend_unit_id_list = [x.get("unit_id", 100001) for x in gacha.get("recommend_unit", [])]
     if set(recommend_unit_id_list) == set([105701, 105702, 101201, 101202, 101101, 101102]):
@@ -1878,6 +1864,8 @@ async def free_gacha_special_event(account_info):
             selected_gacha_type = GachaType.夏日庆典
         elif GachaType.公主庆典 in gacha_types:
             selected_gacha_type = GachaType.公主庆典
+        elif GachaType.自选精选 in gacha_types:
+            selected_gacha_type = GachaType.自选精选
         elif GachaType.精选 in gacha_types:
             selected_gacha_type = GachaType.精选
         elif GachaType.附奖 in gacha_types:
@@ -1889,16 +1877,27 @@ async def free_gacha_special_event(account_info):
         for gacha in data["gacha_info"]:
             if getGachaType(gacha) == selected_gacha_type:
                 msg = []
+                if getGachaType(gacha) == GachaType.自选精选 and gacha["select_pickup_slot_num"] > len(gacha.get("priority_list", [])):
+                    try:
+                        res = await query.query(account_info, "/gacha/select_pickup", {"gacha_id": gacha["id"], "priority_list": [(i + 1) for i in range(gacha["select_pickup_slot_num"])]})
+                        # 20250410:可可萝游骑兵=1 栞游骑兵=2
+                    except Exception as e:
+                        return f'Fail. 检测到当前为自选精选池，但自动选择精选角色失败：{e}'
+                    else:
+                        msg.append(f'检测到当前为自选精选池，自动选择精选角色成功')
                 if getGachaType(gacha) == GachaType.附奖 and gacha["selected_item_id"] == 0:
                     try:
-                        res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100077, "item_id": 31106})
+                        res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100097, "item_id": 31233})
                         # temp TODO modifiy
                         # 20240227:100058/31170
                         # 20240423:100065/31180富婆
                         # 20240823:100076/31134海星 /31131水流夏
                         # 20240827:100077/31106水壶 /31104水狼
+                        # 20250222:100093/31225水怜
+                        # 20250227:100094/31182美空
+                        # 20250410:100097/31233涅亚
                     except Exception as e:
-                        return f'Fail. 检测到当前为复刻池，自动设置附奖扭蛋奖品角色失败'
+                        return f'Fail. 检测到当前为复刻池，但自动设置附奖扭蛋奖品角色失败：{e}'
                     else:
                         msg.append(f'检测到当前为复刻池，自动设置附奖扭蛋奖品角色成功')
                 
@@ -1913,7 +1912,7 @@ async def free_gacha_special_event(account_info):
                             "exchange_id": gacha["exchange_id"],
                             "draw_type": 6,  # 普通免费碎片扭蛋=1 150钻单抽/1500钻抽十连=2 单抽券/十连券单抽=3 免费十连=6 付费50钻=4 付费1500钻抽星3=?
                             "current_cost_num": i,  # 当前抽取所用的物品的数量（普通免费碎片扭蛋=-1 普通钻石抽=钻石数量 单抽券单抽=单抽券数量 免费十连活动抽=剩余免费十连次数 付费钻抽=付费钻数量
-                            "campaign_id": data["campaign_info"]["campaign_id"],
+                            "campaign_id": data["campaign_info"]["campaign_id"], # 使用的不是活动免费十连的话则为0（需验证）
                         })
                     except Exception as e:
                         return f'Fail. 抽取免费十连失败：{e}'
@@ -1942,7 +1941,7 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取特别凭证扭蛋活动举办信息失败：{e}')
     if load_index_resident_info is None:
-        return Outputs.FromStr(OutputFlag.Skip, f'未获取到特别凭证扭蛋活动举办信息，可能不在活动时间')
+        return Outputs.FromStr(OutputFlag.Skip, f'未获取到特别凭证扭蛋活动举办信息，可能没有购买')
     if load_index_resident_info.end_time < load_index_resident_info.server_time:
         return Outputs.FromStr(OutputFlag.Skip, f'特别凭证扭蛋活动已结束')
 
@@ -1976,7 +1975,7 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
         success_cnt = 0
         for i in range(1, fg1_exec_cnt + 1):
             try:
-                gacha_exec_res = await pcrClient.GachaExec(PcrApi.GachaExecRequest(gacha_id=gacha_id, gacha_times=1, exchange_id=exchange_id, draw_type=9005, current_cost_num=current_cost_num, campaign_id=0)) # TODO: 9005是什么，是否需要修改
+                gacha_exec_res = await pcrClient.GachaExec(PcrApi.GachaExecRequest(gacha_id=gacha_id, gacha_times=1, exchange_id=exchange_id, draw_type=9005, current_cost_num=current_cost_num, campaign_id=0))
             except PcrApiException as e:
                 outputs.append(OutputFlag.Error, f'第 {i}/{fg1_exec_cnt} 次抽取特别凭证扭蛋失败：{e}')
                 break
@@ -2003,7 +2002,8 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
             outputs.append(OutputFlag.Info, f'当前进度 {current_point}/{max_point}')
 
     if fg10_exec_cnt > 0:
-        outputs.append(OutputFlag.Warn, "暂不支持特别凭证扭蛋十连抽，请联系bot主人")
+        # await pcrClient.GachaExec(PcrApi.GachaExecRequest(gacha_id=gacha_id(990001), gacha_times=10, exchange_id=exchange_id(999999), draw_type=9006, current_cost_num=current_cost_num, campaign_id=0))
+        outputs.append(OutputFlag.Info, f'您有 {fg10_exec_cnt} 张十连抽奖券未使用')
         
     return outputs
     
@@ -2244,9 +2244,7 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
             full_story = False
         if (id4 * 1000 + 8) not in cache_chara_story_list: # 上面的列表可能更新不及时，添加此判断：该角色缓存中无8话剧情则视为不满
             full_story = False
-        
-        # if id4 == 1164: # 优妮(圣学祭) 只出了一话 # 现在出全了
-        #     max_read_id = 1
+
         max_read_id = 1
         if full_story:
             max_read_id = love_level
@@ -2259,6 +2257,11 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
                 max_read_id = 3
             else:
                 max_read_id = love_level - 4
+            
+        # if id4 == 1164: # 优妮(圣学祭) 只出了一话 # 现在出全了
+        #     max_read_id = 1
+        if id4 == 1255: # 姬塔(术士) 看了升hp对不上轴
+            max_read_id = 1
 
         if max_read_id <= already_read_id:
             continue
@@ -2820,6 +2823,66 @@ async def get_event_id_list(account_info, sweep_type: str = "all", only_open: bo
     return event_id_list, msg if return_close_msg else []
 
 
+async def event_vh_boss_sweep(account_info, event_id_list=None):
+    if event_id_list is None:
+        try:
+            event_id_list, msg = await get_event_id_list(account_info)
+        except Exception as e:
+            return str(e)
+    else:
+        msg = []
+    event_id_list.reverse()
+    for event_id in event_id_list:
+        try:
+            data = await query.query(account_info, "/event/hatsune/top", {"event_id": event_id})
+            boss_ticket_num = data["boss_ticket_info"]["stock"]
+            boss_battle_infos = [x for x in data["boss_battle_info"] if x["boss_id"] == int(f'{event_id}03')]
+            assert len(boss_battle_infos) == 1, f'got {len(boss_battle_info)} boss_battle_info for boss_id {event_id}03'
+            boss_battle_info = boss_battle_infos[0]
+            assert "oneblow_kill_count" in boss_battle_info, f'no oneblow_kill_count in boss_battle_info for boss_id {event_id}03'
+            oneblow_kill_count = boss_battle_info["oneblow_kill_count"]
+            assert "daily_kill_count" in boss_battle_info, f'no daily_kill_count in boss_battle_info for boss_id {event_id}03'
+            daily_kill_count = boss_battle_info["daily_kill_count"]
+        except Exception as e:
+            msg.append(f'Fail. 获取活动{event_id}信息失败：{e}')
+            continue
+        if daily_kill_count >= 1:
+            msg.append(f'Skip. 活动{event_id}的VH Boss今日已扫荡')
+            continue
+        if boss_ticket_num < 30:
+            msg.append(f'Skip. 活动{event_id}的首领挑战券数量为{boss_ticket_num}，无法扫荡')
+            continue
+        if oneblow_kill_count == 0:
+            msg.append(f'Abort. 活动{event_id}的VH Boss未解锁扫荡')
+            continue
+        # if oneblow_kill_count < 3:
+        #     msg.append(f'Abort. 活动{event_id}的Hard Boss未解锁扫荡。解锁扫荡需完成[一场战斗内获胜]{3}次，您目前完成了[{oneblow_kill_count}]次')
+        #     continue
+        try:
+            skip_ticket_num = await query.get_ticket_num(account_info)
+        except Exception as e:
+            msg.append(f'Fail. 获取扫荡券数量失败：{e}')
+            continue
+
+        msg.append(f'活动{event_id}Boss挑战券{boss_ticket_num}张，扫荡券{skip_ticket_num}张')
+        if skip_ticket_num < 1:
+            msg.append(f'Warn. 扫荡券数量不足，无法扫荡')
+            continue
+
+        try:
+            res = await query.query(account_info, "/event/hatsune/boss_battle_skip", {"event_id": event_id,
+                                                                                      "boss_id": int(f'{event_id}03'),
+                                                                                      "exec_skip_num": 1,
+                                                                                      "current_skip_ticket_num": skip_ticket_num,
+                                                                                      "current_boss_ticket_num": boss_ticket_num})
+        except Exception as e:
+            msg.append(f'Fail. 扫荡VH Boss失败：{e}')
+            continue
+
+        msg.append(f'Succeed. 扫荡VH Boss成功')
+    return " ".join(msg)
+
+
 async def event_hard_boss_sweep(account_info, cnt: Union[int, str], event_id_list=None):
     '''
     cnt: int | enum("max", "max-1", "max-2")
@@ -2915,7 +2978,9 @@ async def event_normal_sweep(account_info, sweep_type: str, buy_stamina_passive_
 
     quest_id = int(f'{event_id}1{map_id_int:02d}')
     try:
-        clear_flag = [x["clear_flag"] for x in quest_list if x["quest_id"] == quest_id][0]
+        clear_flags = [x["clear_flag"] for x in quest_list if x["quest_id"] == quest_id]
+        assert len(clear_flags) == 1, f'got {len(clear_flags)} quest info for quest_id {quest_id}'
+        clear_flag = clear_flags[0]
     except Exception as e:
         return f'Fail. 获取活动{event_id} N1-{map_id_int}通关信息失败：{e}'
 
@@ -3518,7 +3583,7 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
             mm.append(f'被移除的功能：{" ".join(old_feature)}')
         if new_feature:
             mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
-            # mm.append('如有需要，请私发“清日常设置”开启。')
+            # mm.append('如有需要，请发“清日常设置”开启。')
         mm.append('已自动修正配置文件')
         mm = '\n'.join(mm)
         await bot.send(ev, mm)
@@ -3529,7 +3594,7 @@ async def do_daily_config(bot: HoshinoBot, ev: CQEvent):
     save_sec(dic)
 
     if ev.group_id is not None:
-        await bot.send(ev, f'{uri}/autopcr/el')
+        await bot.send(ev, f'{uri}/autopcr/ell')
     else:
         await bot.send(ev, f'{uri}/autopcr/config?url_key={dic[qqid]["url_key"]}\n请勿泄露该密钥！')
         
@@ -3552,6 +3617,7 @@ def close_event_config(qqid):
     if dic[qqid]["daily_config"]["event_hard_config_reset"]:
         dic[qqid]["daily_config"]["event_hard_135"] = "disabled"
         dic[qqid]["daily_config"]["event_hard_24"] = "disabled"
+        dic[qqid]["daily_config"]["event_vh_boss_sweep"] = False
         dic[qqid]["daily_config"]["event_hard_boss_sweep"] = False
     dic[qqid]["daily_config"]["event_normal_5"] = "disabled"
     dic[qqid]["daily_config"]["event_normal_15"] = "disabled"
@@ -3619,7 +3685,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
             mm.append(f'被移除的功能：{" ".join(old_feature)}')
         if new_feature:
             mm.append(f'新增的功能：{" ".join([function_list.get(x, {}).get("cn", x) for x in new_feature])}')
-            mm.append('如有需要，请私发“清日常设置”开启。')
+            mm.append('如有需要，请发“清日常设置”开启。')
         mm.append('已自动修正配置文件。')
         mm = '\n'.join(mm)
         if ev is not None:
@@ -3716,20 +3782,24 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         if '当前无开放的活动' in ret:
             config = close_event_config(qqid)
         progress.append(["event_hard_24", f'{ret}'])
-    if config["xinsui_5"] and not stamina_short:
-        progress.append(["xinsui_5", f'{await investigate(account_info, 18001005, config["xinsui_5"], config["buy_stamina_passive"])}'])
-    if config["xinsui_4"] and not stamina_short:
-        progress.append(["xinsui_4", f'{await investigate(account_info, 18001004, config["xinsui_4"], config["buy_stamina_passive"])}'])
-    if config["xinsui_3"] and not stamina_short:
-        progress.append(["xinsui_3", f'{await investigate(account_info, 18001003, config["xinsui_3"], config["buy_stamina_passive"])}'])
-    if config["xinsui_2"] and not stamina_short:
-        progress.append(["xinsui_2", f'{await investigate(account_info, 18001002, config["xinsui_2"], config["buy_stamina_passive"])}'])
-    if config["xinsui_1"] and not stamina_short:
-        progress.append(["xinsui_1", f'{await investigate(account_info, 18001001, config["xinsui_1"], config["buy_stamina_passive"])}'])
-    if config["xingqiubei_2"] and not stamina_short:
-        progress.append(["xingqiubei_2", f'{await investigate(account_info, 19001002, config["xingqiubei_2"], config["buy_stamina_passive"])}'])
-    if config["xingqiubei_1"] and not stamina_short:
-        progress.append(["xingqiubei_1", f'{await investigate(account_info, 19001001, config["xingqiubei_1"], config["buy_stamina_passive"])}'])
+    if config["xinsui_all"]:
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001006, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001005, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001004, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001003, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001002, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001001, config["xinsui_all"], config["buy_stamina_passive"])}'])
+    if config["xingqiubei_all"]:
+        if not stamina_short:
+            progress.append(["xingqiubei_all", f'{await investigate(account_info, 19001002, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
+            progress.append(["xingqiubei_all", f'{await investigate(account_info, 19001001, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
     
     # allin
     for i in range(10):
@@ -3744,7 +3814,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11062003: 3, 11062005: 8, 11062006: 14, 11062007: 23})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11065001: 6, 11065002: 1, 11065003: 1, 11065004: 1, 11065005: 3})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -3782,6 +3852,11 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
     # allin
     
+    if config["event_vh_boss_sweep"]:
+        ret = await event_vh_boss_sweep(account_info)
+        if '当前无开放的活动' in ret:
+            config = close_event_config(qqid)
+        progress.append(["event_vh_boss_sweep", f'{ret}'])
     if config["event_hard_boss_sweep"]:
         ret = await event_hard_boss_sweep(account_info, config["event_hard_boss_sweep"])
         if '当前无开放的活动' in ret:
@@ -4753,5 +4828,10 @@ async def axistest(*args):
 async def test_on_startup():
     pcrClient = PcrApi(get_sec()["981082801"])
     await pcrClient.Login(always_call_login_and_check=True)
+
     # print(await pcrClient.u_get_quest_async(11018001))
-    print(await travel_routine(pcrClient))
+    # print(await travel_routine(pcrClient))
+    
+    dic = get_sec()
+    account_info = dic["981082801"]
+    print(await free_gacha_special_event(account_info))

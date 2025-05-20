@@ -102,7 +102,6 @@ def _should_respond(event: CQEvent) -> bool:
 async def handle_message(bot, event: CQEvent, _):
     if len(event.message.extract_plain_text()) > 512:
         raise CanceledException('ignore too long messages')
-
     if not _should_respond(event):
         raise CanceledException('ignore message')
 
@@ -110,7 +109,6 @@ async def handle_message(bot, event: CQEvent, _):
         for service_func in t.find_handler(event):
             if service_func.only_to_me and not event['to_me']:
                 continue  # not to me, ignore.
-
             if not service_func.sv._check_all(event):
                 continue  # permission denied.
 

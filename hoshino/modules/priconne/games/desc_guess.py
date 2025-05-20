@@ -25,8 +25,7 @@ gm = GameMaster(DB_PATH)
 sv = Service("pcr-desc-guess", bundle="pcr娱乐", help_="""
 [猜角色] 猜猜bot在描述哪位角色
 [猜角色排行] 显示小游戏的群排行榜(只显示前十)
-""".strip()
-)
+""".strip(), enable_on_default=False)
 
 
 @sv.on_fullmatch("猜角色排行", "猜角色排名", "猜角色排行榜", "猜角色群排行")

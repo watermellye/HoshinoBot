@@ -1,14 +1,20 @@
-from quart import render_template, request, url_for, make_response, jsonify, Blueprint, Response, send_from_directory, send_file
+# built-in
 from pathlib import Path
-from json import load, dump, dumps
-import shutil
+from json import load, dumps
 import asyncio
-import nonebot
-from ..pcr_secret import __do_daily, get_sec, save_sec
 import datetime
 import hashlib
 import random
 import string
+from multidict import MultiDict
+from typing import Optional, Dict
+
+# 3rd-party
+from quart import render_template, request, make_response, jsonify, Blueprint, send_file, redirect, url_for
+import nonebot
+
+# project
+from ..pcr_secret import __do_daily, get_sec, save_sec
 
 gs_currentDir = Path(__file__).parent # myweb
 gs_pcrSecretDir = gs_currentDir.parent / "pcr_secret"
@@ -44,28 +50,6 @@ async def make_response_json(statusCode: int = 200,
             'message': message,
             'data': data
         }))
-
-
-def allow_cron() -> bool:
-    f = True
-    sec = gs_pcrSecretDir / "allow_cron.json"
-    if sec.exists():
-        with open(sec, "r", encoding="utf-8") as fp:
-            f = load(fp)["allow_cron"]
-    return f
-
-
-# def get_sec():
-#     sec = gs_pcrSecretDir / 'secret.json'
-#     with open(sec, "r", encoding="utf-8") as fp:
-#         dic = load(fp)
-#     return dic
-
-
-# def save_sec(dic):
-#     sec = gs_pcrSecretDir / 'secret.json'
-#     with open(sec, "w", encoding="utf-8") as fp:
-#         dump(dic, fp, ensure_ascii=False, indent=4)
 
 
 def auto_correct(qqid: str):
@@ -111,17 +95,6 @@ def auto_correct(qqid: str):
     return need_correct, mm
 
 
-# def verify_key(config):
-#     comment = get_comment()
-#     for item in comment:
-#         if item not in config:
-#             return False
-#     for item in config:
-#         if item not in comment:
-#             return False
-#     return True
-
-
 def config_with_comment(config):
     comment = get_comment()
     for item in config:
@@ -136,105 +109,155 @@ def config_with_comment(config):
         config[item] = {"value": config[item], **com}
     return config
 
+
+def get_url_key_from_request(data: MultiDict) -> Optional[str]:
+    url_key = data.get("url_key", None)
+    return url_key if url_key else None
+
+# may raise AssertionError
+def get_qqid_from_url_key(url_key: str) -> Optional[int]:
+    if not url_key:
+        return None
+    qqids = [qqid for qqid, config in get_sec().items() if config.get("url_key", None) == url_key]
+    if not qqids:
+        return None
+    assert len(qqids) == 1, "Internal Error: duplicate url_key"
+    return qqids[0]
+
+
+def generate_url_key_if_not_exist(dic: Dict[int, dict], qqid: int) -> None:
+    config = dic.get(qqid, None)
+    if not config:
+        return
+    if "url_key" not in config:
+        dic[qqid]["url_key"] = MyHash(f'{qqid}{dic[qqid]["pcrid"]}')
+        save_sec(dic)
+
+
+def get_config_from_qqid(qqid: int) -> Optional[dict]:
+    return get_sec().get(qqid, None)
+
+
+def get_config_from_qqid_with_validation(qqid: int, url_key: str) -> Optional[dict]:
+    dic = get_sec()
+    config = dic.get(qqid, None)
+    if not config:
+        return None
+    generate_url_key_if_not_exist(dic, qqid)
+    if config["url_key"] != url_key:
+        return None
+    return config
+
+
 @auto_pcr_web.route('/result', methods=['GET'])
 async def result_page():
-    try:
-        url_key = request.args["url_key"]
-        assert len(url_key) > 0, "别试了"
-    except:
-        return await render_template("404.html", error_code=410, message="找不到该用户")
-    dic = get_sec()
-    for qqid in dic:
-        config = dic[qqid]
-        if config.get('url_key', "") == url_key:
-            return await render_template("result_page.html")
-    return await render_template("404.html", message="找不到该用户")
+    return await render_template("result_page.html")
 
 
 @auto_pcr_web.route('/api/result', methods=['POST'])
 async def get_result_pic():
+    url_key = get_url_key_from_request(await request.form)
+    if not url_key:
+        return 'Invalid param(s): url_key', 404
+
     try:
-        data = await request.form
-        url_key = data.get('url_key')
-        assert(url_key and len(url_key) > 0), "别试了"
-    except:
+        qqid = get_qqid_from_url_key(url_key)
+    except AssertionError as e:
+        return str(e), 500
+    if not qqid:
         return 'User not found', 404
-    dic = get_sec()
-    for qqid in dic:
-        config = dic[qqid]
-        if config.get('url_key', "") == url_key:        
-            image_path = gs_pcrSecretDir / "daily_result" / f'{qqid}.png'
-            if image_path.exists():
-                return await send_file(image_path.as_posix(), mimetype='image/png')
-            return 'Image not found', 404
-    return 'User not found', 404
+    
+    image_path = gs_pcrSecretDir / "daily_result" / f'{qqid}.png'
+    if not image_path.exists():
+        return 'Image not found', 404
+    return await send_file(image_path.as_posix(), mimetype='image/png')
+
+
+@auto_pcr_web.route('/update_pwd', methods=['GET'])
+async def update_pwd_page():
+    url_key = get_url_key_from_request(request.args)
+    if not url_key:
+        return await render_template("404.html", error_code=410, message="找不到该用户")
+    
+    qqid = get_qqid_from_url_key(url_key)
+    if qqid:
+        return await render_template("update_pwd_page.html")
+    else:
+        return await render_template("404.html", message="找不到该用户")
+
+
+@auto_pcr_web.route('/api/update_pwd', methods=['POST'])
+async def update_pwd():
+    url_key = get_url_key_from_request(await request.form)
+    if not url_key:
+        return 'User not found', 404
+
+    qqid = get_qqid_from_url_key(url_key)
+    if not qqid:
+        return 'User not found', 404
+
+    return await make_response_json(200, f'即将实装') # TODO
 
 
 @auto_pcr_web.route('/config', methods=['GET'])
 async def config_page():
-    try:
-        url_key = request.args["url_key"]
-        assert len(url_key) > 0, "别试了"
-    except:
+    url_key = get_url_key_from_request(request.args)
+    if not url_key:
         return await render_template("404.html", error_code=410, message="找不到该用户")
-    dic = get_sec()
-    for qqid in dic:
-        config = dic[qqid]
-        if config.get('url_key', "") == url_key:
-            return await render_template("config_page.html")
-    return await render_template("404.html", message="找不到该用户")
+
+    qqid = get_qqid_from_url_key(url_key)
+    if qqid:
+        return await render_template("config_page.html")
+    else:
+        return await render_template("404.html", message="找不到该用户")
 
 
 @auto_pcr_web.route('/el', methods=['GET'])
 async def login_page():
     return await render_template("login.html")
 
+@auto_pcr_web.route('/ell', methods=['GET'])
+async def login_page_ell():
+    return await render_template("login.html")    
 
 @auto_pcr_web.route('/api/el', methods=['POST'])
 async def login():
-    try:
-        data = await request.form
-        qqid:str = str(data.get('field_qq_id'))
-        if len(qqid) == 0:
-            return await make_response_json(400, "QQ不可为空")
-        pcr_password:str = str(data.get('field_pcr_password'))
-        if len(pcr_password) == 0:
-            return await make_response_json(400, "PCR密码不可为空")
-    except:
+    data = await request.form
+    
+    qqid: str = data.get('field_qq_id', None)
+    if not qqid:
         return await make_response_json(400, "请求格式错误")
+    qqid = str(qqid)
     
+    pcr_password: str = data.get('field_pcr_password', None)
+    if not pcr_password:
+        return await make_response_json(400, "请求格式错误")
+    pcr_password = str(pcr_password)
+
     dic = get_sec()
-    
     if dic.get(qqid, {}).get("password", "") != pcr_password:
         return await make_response_json(406, "账号或密码错误")
-    if "pcrid" not in dic[qqid]:
-        return await make_response_json(406, "没有账号基础信息")
-    if "url_key" not in dic[qqid]:
-        dic[qqid]["url_key"] = MyHash(f'{qqid}{dic[qqid]["pcrid"]}')
-        save_sec(dic)
-
+    generate_url_key_if_not_exist(dic, qqid)
     return await make_response_json(200, f'/autopcr/config?url_key={dic[qqid]["url_key"]}')
 
 
 @auto_pcr_web.route('/api/trigger_daily', methods=['POST'])
 async def trigger_daily():
-    try:
-        data = await request.form
-        qqid = data.get('qqid')
-        url_key = data.get('url_key')
-        assert(url_key and len(url_key) > 0), "别试了"
-    except:
+    data = await request.form
+    qqid = data.get('qqid', None)
+    url_key = data.get('url_key', None)
+    if not qqid or not url_key:
         return await make_response_json(400, "请求格式错误")
+    
     dic = get_sec()
     if qqid not in dic:
         return await make_response_json(404, "用户不存在")
+    generate_url_key_if_not_exist(dic, qqid)
     if dic[qqid]["url_key"] != url_key:
         return await make_response_json(406, "校验失败")
-    
-    # return await make_response_json(501, "即将实装")
-    
+
     task = asyncio.create_task(__do_daily(qqid))
-    await asyncio.sleep(3)
+    await asyncio.sleep(2)
     if task.done():
         try:
             result = task.result()
@@ -280,10 +303,11 @@ async def get_userdata():
     if not qqids:
         return await make_response_json(406, "校验失败")
     if len(qqids) > 1:
-        return await make_response_json(500, "内部错误：url_key重复")
+        return await make_response_json(500, "Internal Error: duplicate url_key")
     qqid = qqids[0]
     config = dic[qqid]
     return await make_response_json(data={"qqid": qqid, "qqname": config.get('name', ""), "pcrname": config.get('pcrname', ""), "pcrid": config.get('pcrid', "")})
+
 
 @auto_pcr_web.route('/api/config', methods=['PUT'])
 async def update_config():
@@ -322,6 +346,13 @@ async def update_config():
 
     save_sec(dic)
     return await make_response_json(200, f'修改成功：\n' + '\n'.join(retmsg))
+
+
+@auto_pcr_web.route('/404')
+async def not_found():
+    error_code = request.args.get('error_code', "")
+    message = request.args.get('message', "")
+    return await render_template("404.html", error_code=error_code, message=message)
 
 
 def get_comment() -> dict: 

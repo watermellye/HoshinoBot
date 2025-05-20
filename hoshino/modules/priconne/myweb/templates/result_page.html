@@ -16,17 +16,16 @@
                 url: '/autopcr/api/result',
                 method: 'POST',
                 data: {"url_key": window.location.search.substring(9)},
-                success: function(data, status, xhr) {
-                    var blob = new Blob([data], {type: xhr.getResponseHeader('Content-Type')});
-                    var url = window.URL.createObjectURL(blob);
+                xhrFields: {
+                    responseType: 'blob'
+                },
+                success: function(data) {
+                    var url = window.URL.createObjectURL(data); // Use the blob data directly
                     $("#myImage").attr("src", url);
                 },
                 error: function(xhr, error) {
                     $('#image-wrapper').text('无法加载图片');
                     $('#myImage').hide();
-                },
-                xhrFields: {
-                    responseType: 'blob'
                 }
             });
         });
