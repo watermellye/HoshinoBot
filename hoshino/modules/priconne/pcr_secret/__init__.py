@@ -1777,6 +1777,7 @@ class GachaType(IntEnum):
     精选 = 3  # 新池
     附奖 = 31  # 复刻池
     自选精选 = 32
+    附奖自选精选 = 33
     星3确定 = 7
     公主庆典 = 8
     限定星3必得 = 9
@@ -1795,13 +1796,17 @@ class GachaType(IntEnum):
 def getGachaType(gacha: dict) -> GachaType:
     if gacha.get("type") == 3:
         return GachaType.普通
-    if "selected_item_id" in gacha:
+    is自选精选 = gacha.get("cost_num_single", -1) == 150 and str(gacha.get("id", 0))[0] == '3' and ("select_pickup_slot_num" in gacha or "priority_list" in gacha)
+    is附奖 = "selected_item_id" in gacha # 未选择时值为 0
+    if is附奖 and is自选精选:
+        return GachaType.附奖自选精选
+    if is附奖:
         return GachaType.附奖
     if gacha.get("cost_num_single", -1) == 1500 and str(gacha.get("id", 0))[0] == '7':
         return GachaType.星3确定
     if gacha.get("cost_num_single", -1) == 1500 and str(gacha.get("id", 0))[:2] == '11':
         return GachaType.限定星3必得
-    if gacha.get("cost_num_single", -1) == 150 and str(gacha.get("id", 0))[0] == '3' and ("select_pickup_slot_num" in gacha or "priority_list" in gacha):
+    if is自选精选:
         return GachaType.自选精选
     
     recommend_unit_id_list = [x.get("unit_id", 100001) for x in gacha.get("recommend_unit", [])]
@@ -1858,81 +1863,95 @@ async def free_gacha_special_event(account_info):
 
     # 当前有免费十连活动
     remain_cnt = data["campaign_info"]["fg10_exec_cnt"]
-    if remain_cnt > 0:
-        gacha_types = set([getGachaType(gacha) for gacha in data["gacha_info"]])
-        if GachaType.夏日庆典 in gacha_types:
-            selected_gacha_type = GachaType.夏日庆典
-        elif GachaType.公主庆典 in gacha_types:
-            selected_gacha_type = GachaType.公主庆典
-        elif GachaType.自选精选 in gacha_types:
-            selected_gacha_type = GachaType.自选精选
-        elif GachaType.精选 in gacha_types:
-            selected_gacha_type = GachaType.精选
-        elif GachaType.附奖 in gacha_types:
-            selected_gacha_type = GachaType.附奖
-        elif GachaType.白金 in gacha_types:
-            selected_gacha_type = GachaType.白金
-        else:
-            return f'Warn. 检测到免费十连，但池子类别不受支持，目前无法抽取。'
-        for gacha in data["gacha_info"]:
-            if getGachaType(gacha) == selected_gacha_type:
-                msg = []
-                if getGachaType(gacha) == GachaType.自选精选 and gacha["select_pickup_slot_num"] > len(gacha.get("priority_list", [])):
-                    try:
-                        res = await query.query(account_info, "/gacha/select_pickup", {"gacha_id": gacha["id"], "priority_list": [(i + 1) for i in range(gacha["select_pickup_slot_num"])]})
-                        # 20250410:可可萝游骑兵=1 栞游骑兵=2
-                    except Exception as e:
-                        return f'Fail. 检测到当前为自选精选池，但自动选择精选角色失败：{e}'
-                    else:
-                        msg.append(f'检测到当前为自选精选池，自动选择精选角色成功')
-                if getGachaType(gacha) == GachaType.附奖 and gacha["selected_item_id"] == 0:
-                    try:
-                        res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100097, "item_id": 31233})
-                        # temp TODO modifiy
-                        # 20240227:100058/31170
-                        # 20240423:100065/31180富婆
-                        # 20240823:100076/31134海星 /31131水流夏
-                        # 20240827:100077/31106水壶 /31104水狼
-                        # 20250222:100093/31225水怜
-                        # 20250227:100094/31182美空
-                        # 20250410:100097/31233涅亚
-                    except Exception as e:
-                        return f'Fail. 检测到当前为复刻池，但自动设置附奖扭蛋奖品角色失败：{e}'
-                    else:
-                        msg.append(f'检测到当前为复刻池，自动设置附奖扭蛋奖品角色成功')
-                
-                get_already_have_3x_name = []
-                get_new_name = []
-                
-                for i in range(remain_cnt, 0, -1): # 还未抽取
-                    try:
-                        res = await query.query(account_info, "/gacha/exec", {
-                            "gacha_id": gacha["id"],
-                            "gacha_times": 10,
-                            "exchange_id": gacha["exchange_id"],
-                            "draw_type": 6,  # 普通免费碎片扭蛋=1 150钻单抽/1500钻抽十连=2 单抽券/十连券单抽=3 免费十连=6 付费50钻=4 付费1500钻抽星3=?
-                            "current_cost_num": i,  # 当前抽取所用的物品的数量（普通免费碎片扭蛋=-1 普通钻石抽=钻石数量 单抽券单抽=单抽券数量 免费十连活动抽=剩余免费十连次数 付费钻抽=付费钻数量
-                            "campaign_id": data["campaign_info"]["campaign_id"], # 使用的不是活动免费十连的话则为0（需验证）
-                        })
-                    except Exception as e:
-                        return f'Fail. 抽取免费十连失败：{e}'
-                    try:                        
-                        for reward_info in res["reward_info_list"]:
-                            if "exchange_data" in reward_info:
-                                exchange_data = reward_info["exchange_data"]
-                                if int(exchange_data["rarity"]) == 3:
-                                    get_already_have_3x_name.append(chara.fromid(int(exchange_data["unit_id"]) // 100).name)
-                            elif int(reward_info["id"]) != 90005 and len(str(reward_info["id"])) == 6:
-                                get_new_name.append(chara.fromid(int(reward_info["id"]) // 100).name)
-                    except Exception as e:
-                        return f'Warn. 抽取免费十连成功，但获取结果失败：{e}'
-                msg.append("Succeed.")
-                msg.append(f'恭喜抽出新角色：{" ".join(get_new_name)}' if len(get_new_name) else "没有抽出新角色")
-                msg.append(f'抽出已有三星角色：{" ".join(get_already_have_3x_name)}' if len(get_already_have_3x_name) else "没有抽出已有三星角色")
-                msg.append(f'当前进度{res["gacha_point_info"]["current_point"]}/{res["gacha_point_info"]["max_point"]}')
-                return " ".join(msg)
-    else:
+    if remain_cnt <= 0:
         return f'Skip. 今日免费十连已抽取。'
+
+    id2type: Dict[int, GachaType] = {gacha["id"]: getGachaType(gacha) for gacha in data["gacha_info"] if "id" in gacha}
+    msg = ["Info. 当前开放的扭蛋池：" + ", ".join([f'{id}({tp.name})' for id, tp in id2type.items() if tp != GachaType.普通])]
+     
+    priority_order = [
+        GachaType.夏日庆典,
+        GachaType.公主庆典,
+        GachaType.附奖自选精选,
+        GachaType.自选精选,
+        GachaType.精选,
+        GachaType.附奖,
+        GachaType.白金
+    ]
+    gacha_types = set(id2type.values())
+    selected_gacha_type = None
+    for gacha_type in priority_order:
+        if gacha_type in gacha_types:
+            selected_gacha_type = gacha_type
+            break
+    if selected_gacha_type is None:
+        msg.append(f'Warn. 检测到免费十连，但池子类别不受支持，目前无法抽取。')
+        return " ".join(msg)
+    msg.append(f'Info. 将抽取[{selected_gacha_type.name}]池')
+    
+    selected_gacha_ids = [id for id, tp in id2type.items() if tp == selected_gacha_type]
+    if len(selected_gacha_ids) > 1:
+        msg.append(f'Warn. 检测到多个[{selected_gacha_type.name}]池，将选择[{selected_gacha_ids[0]}]池')
+    selected_gacha_id = selected_gacha_ids[0]
+    selected_gacha = next((gacha for gacha in data["gacha_info"] if gacha.get("id", -1) == selected_gacha_id), None)
+
+    if selected_gacha_type in [GachaType.自选精选, GachaType.附奖自选精选] and len(selected_gacha.get("priority_list", [])) < selected_gacha["select_pickup_slot_num"]:
+        try:
+            res = await query.query(account_info, "/gacha/select_pickup", {"gacha_id": selected_gacha_id, "priority_list": [(i + 1) for i in range(selected_gacha["select_pickup_slot_num"])]})
+            # 20250410:可可萝游骑兵=1 栞游骑兵=2
+        except Exception as e:
+            msg.append(f'Fail. 自动选择精选角色失败：{e}')
+            return " ".join(msg)
+        else:
+            msg.append(f'Info. 自动选择精选角色成功')
+    if selected_gacha_type in [GachaType.附奖, GachaType.附奖自选精选] and selected_gacha["selected_item_id"] == 0:
+        try:
+            res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100106, "item_id": 31077})
+            # temp TODO modifiy
+            # 20240227:100058/31170
+            # 20240423:100065/31180富婆
+            # 20240823:100076/31134海星 /31131水流夏
+            # 20240827:100077/31106水壶 /31104水狼
+            # 20250222:100093/31225水怜
+            # 20250227:100094/31182美空
+            # 20250410:100097/31233涅亚
+            # 20250622:100106/31077水女仆
+        except Exception as e:
+            msg.append(f'Fail. 检测到当前为复刻池，但自动设置附奖扭蛋奖品角色失败：{e}')
+            return " ".join(msg)
+        else:
+            msg.append(f'Info. 自动设置附奖扭蛋奖品角色成功')
+    
+    get_already_have_3x_name = []
+    get_new_name = []
+    
+    for i in range(remain_cnt, 0, -1): # 还未抽取
+        try:
+            res = await query.query(account_info, "/gacha/exec", {
+                "gacha_id": selected_gacha_id,
+                "gacha_times": 10,
+                "exchange_id": selected_gacha["exchange_id"],
+                "draw_type": 6,  # 普通免费碎片扭蛋=1 150钻单抽/1500钻抽十连=2 单抽券/十连券单抽=3 免费十连=6 付费50钻=4 付费1500钻抽星3=?
+                "current_cost_num": i,  # 当前抽取所用的物品的数量（普通免费碎片扭蛋=-1 普通钻石抽=钻石数量 单抽券单抽=单抽券数量 免费十连活动抽=剩余免费十连次数 付费钻抽=付费钻数量
+                "campaign_id": data["campaign_info"]["campaign_id"], # 使用的不是活动免费十连的话则为0（需验证）
+            })
+        except Exception as e:
+            return f'Fail. 抽取免费十连失败：{e}'
+        try:                        
+            for reward_info in res["reward_info_list"]:
+                if "exchange_data" in reward_info:
+                    exchange_data = reward_info["exchange_data"]
+                    if int(exchange_data["rarity"]) == 3:
+                        get_already_have_3x_name.append(chara.fromid(int(exchange_data["unit_id"]) // 100).name)
+                elif int(reward_info["id"]) != 90005 and len(str(reward_info["id"])) == 6:
+                    get_new_name.append(chara.fromid(int(reward_info["id"]) // 100).name)
+        except Exception as e:
+            return f'Warn. 抽取免费十连成功，但获取结果失败：{e}'
+    msg.append("Succeed.")
+    msg.append(f'恭喜抽出新角色：{" ".join(get_new_name)}' if len(get_new_name) else "没有抽出新角色")
+    msg.append(f'抽出已有三星角色：{" ".join(get_already_have_3x_name)}' if len(get_already_have_3x_name) else "没有抽出已有三星角色")
+    msg.append(f'当前进度{res["gacha_point_info"]["current_point"]}/{res["gacha_point_info"]["max_point"]}')
+    return " ".join(msg)
 
 
 async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
@@ -2389,6 +2408,10 @@ async def read_event_story(account_info):
             msg.append(f'Skip. 活动{event_id}所有剧情已阅读完毕')
             continue
 
+        if 5124007 in story_id_list:  # 2025年6月 战栗幽奇海岸 夏日度假村惊悚怪谈 剧情活动 里世界
+            story_id_list = [x for x in story_id_list if x not in (5124006, 5124007)]
+            story_id_list.extend([5124004, 5124005, 5124006, 5124007])
+
         succ = 0
         for story_id in story_id_list:
             try:
@@ -2770,12 +2793,13 @@ async def get_new_event_id_list(account_info, event_id_list: List[int]) -> List[
         try:
             data = await query.query(account_info, "/event/hatsune/top", {"event_id": event_id})
             if data.get("opening", {}).get("story_id", 0):
-                story_id_list[i] = int(data["opening"]["story_id"]) // 1000 % 100
+                story_id_list[i] = int(data["opening"]["story_id"]) // 1000 % 1000
             elif len(data.get("stories", [])):
-                story_id_list[i] = int(data["stories"][0].get("story_id", 0)) // 1000 % 100
+                story_id_list[i] = int(data["stories"][0].get("story_id", 0)) // 1000 % 1000
         except Exception as e:
             raise Exception(f'Fail. 获取活动{event_id}信息失败：{e}')
 
+    # 还有更好的判断方法：新活动的活动id和剧情id对应，复刻活动不对应。例如：新活动10122对应剧情5122000；复刻活动10123对应剧情5096000
     ew_list = sorted(zip(event_id_list, story_id_list), key=lambda x: x[1], reverse=True)
     new_event_id_list = [ew[0] for ew in ew_list if ew_list[0][1] - ew[1] < 5]
 
@@ -3784,6 +3808,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
         progress.append(["event_hard_24", f'{ret}'])
     if config["xinsui_all"]:
         if not stamina_short:
+            progress.append(["xinsui_all", f'{await investigate(account_info, 18001007, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        if not stamina_short:
             progress.append(["xinsui_all", f'{await investigate(account_info, 18001006, config["xinsui_all"], config["buy_stamina_passive"])}'])
         if not stamina_short:
             progress.append(["xinsui_all", f'{await investigate(account_info, 18001005, config["xinsui_all"], config["buy_stamina_passive"])}'])
@@ -3814,7 +3840,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11065001: 6, 11065002: 1, 11065003: 1, 11065004: 1, 11065005: 3})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11065006: 1, 11065007: 1, 11065008: 1, 11065009: 1, 11065010: 1})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -4826,12 +4852,9 @@ async def axistest(*args):
 #     asyncio.create_task(test_on_startup())
     
 async def test_on_startup():
-    pcrClient = PcrApi(get_sec()["981082801"])
+    dic = get_sec()
+    account_info = dic["02"]
+    pcrClient = PcrApi(get_sec()["02"])
     await pcrClient.Login(always_call_login_and_check=True)
 
-    # print(await pcrClient.u_get_quest_async(11018001))
-    # print(await travel_routine(pcrClient))
-    
-    dic = get_sec()
-    account_info = dic["981082801"]
     print(await free_gacha_special_event(account_info))
