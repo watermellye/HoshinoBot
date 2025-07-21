@@ -1,20 +1,24 @@
-from traceback import print_exc
-from typing import Tuple
-from msgpack import packb, unpackb
-#from hoshino.aiorequests import post
-import aiohttp
-from random import randint
-from json import loads
-from hashlib import md5
-from Crypto.Cipher import AES
-from base64 import b64encode, b64decode
-from ._bili_game_sdk import TryLogin
 from asyncio import sleep, TimeoutError
-import re
-from os.path import dirname, join, exists
-from os import makedirs
+from base64 import b64encode, b64decode
 from copy import deepcopy
 from datetime import datetime
+from hashlib import md5
+from json import loads
+from msgpack import packb, unpackb
+from os import makedirs
+from os.path import dirname, join, exists
+from pathlib import Path
+from random import randint
+from typing import Tuple
+import random
+import re
+import string
+
+import aiohttp
+from Crypto.Cipher import AES
+#from hoshino.aiorequests import post
+
+from ._bili_game_sdk import TryLogin
 from ..autopcr_db.typing import *
 
 gs_apiRoot = 'http://le1-prod-all-gs-gzlj.bilibiligame.net'
@@ -27,26 +31,35 @@ if exists(gs_versionCachePath):
         g_nowVersion = fp.read().strip()
 gs_defaultHeaders = {
     'Accept-Encoding': 'gzip',
-    'User-Agent': 'Dalvik/2.1.0 (Linux, U, Android 5.1.1, PCRT00 Build/LMY48Z)',
+    'User-Agent': 'Dalvik/2.1.0 (Linux, U, Android 9, SM-G973F Build/PPR1.180610.011)',
     'X-Unity-Version': '2018.4.30f1',
     'APP-VER': g_nowVersion,
     'BATTLE-LOGIC-VERSION': '4',
     'BUNDLE-VER': '',
     'DEVICE': '2',
-    'DEVICE-ID': '7b1703a5d9b394e24051d7a5d4818f17',
-    'DEVICE-NAME': 'OPPO PCRT00',
+    'DEVICE-NAME': 'Samsung SM-G973F',
     'EXCEL-VER': '1.0.0',
-    'GRAPHICS-DEVICE-NAME': 'Adreno (TM) 640',
-    'IP-ADDRESS': '10.0.2.15',
+    'GRAPHICS-DEVICE-NAME': 'Mali-G76 MP12',
+    'IP-ADDRESS': '100.98.233.111',
     'KEYCHAIN': '',
     'LOCALE': 'CN',
-    'PLATFORM-OS-VERSION': 'Android OS 5.1.1 / API-22 (LMY48Z/rel.se.infra.20200612.100533)',
+    'PLATFORM-OS-VERSION': 'Android OS 9 / API-28 (PPR1.180610.011/G973FXXU8FUE1)',
     'REGION-CODE': '',
     'RES-KEY': 'ab00a0a6dd915a052a2ef7fd649083e5',
     'RES-VER': '10002200',
     'SHORT-UDID': '0'
 }
 
+gs_current_dir = Path(__file__).parent
+gs_secret_key_path = gs_current_dir / "secret.key"
+
+if gs_secret_key_path.exists():
+    with gs_secret_key_path.open("r", encoding="utf-8") as fp:
+        gs_secret_key = fp.read()
+else:
+    gs_secret_key = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    with gs_secret_key_path.open("w", encoding="utf-8") as fp:
+        fp.write(gs_secret_key)
 
 class ApiException(Exception):
     def __init__(self, message:str, code:int):
@@ -84,8 +97,8 @@ async def fetch_post(url, data, headers, timeout):
     async with aiohttp.ClientSession() as session:
         async with session.post(url, data=data, headers=headers, timeout=timeout) as resp:
             return await resp.content.read()
-        
-        
+
+
 class PcrClient:
     def __init__(self, account: str, password: str, platfrom: int = 2, channel: int = 1, qqid: int = None):
         self._platform = platfrom
@@ -97,6 +110,8 @@ class PcrClient:
         self._headers['PLATFORM'] = str(self._platform)
         self._headers['PLATFORM-ID'] = str(self._platform)
         self._headers['CHANNEL-ID'] = str(self._channel)
+        # md5() produces 128-bit (16-byte) output, hexdigest() converts it to 32 hexadecimal characters. Therefore, the output is always 32 characters regardless of input.
+        self._headers['DEVICE-ID'] = md5(f'{account}:{gs_secret_key}'.encode('utf-8')).hexdigest()
         
         self.needLoginAndCheck = True
         self._needBiliLogin = True

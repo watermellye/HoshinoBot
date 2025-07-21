@@ -898,6 +898,14 @@ class PcrApi:
         # top_event_id=4007：choice_number=1：60% 获得 3 金装，40% 获得 1 金装；choice_number=2：总是获得 2 金装。
         # top_event_id=4009：choice_number=1：30% 获得 1000 特别武器币，70% 获得 200 币；choice_number=2：总是获得 400 币。
         top_event_skin_id_list: List[int] # [103011, 103711] # [118111] # [105211]
+    
+    class round_event_data(BaseModel):
+        round_event_id: int = Field(..., description="金字塔事件ID") # 截至 20250703 总是 1
+        skin_id_list: List[int] = Field(default_factory=list) # [105411, 106811, 107111, 107011]
+        round: int = Field(..., description="当前在第几层", examples=[1, 2, 3])
+        left_door_effect_id: int = Field(..., examples=[900000])
+        right_door_effect_id: int = Field(..., examples=[900000])
+        expect_reward_list: List[Dict] = Field(default_factory=list) 
         
     class travel__top(BaseModel):
         travel_quest_list: List['PcrApi.travel_quest'] = []
@@ -910,12 +918,13 @@ class PcrApi:
         ex_equip_id_list: List[int] = Field(default_factory=list, description="仅当get_ex_equip_album_flag=1时响应中包含此字段", example=[4101101, 4101102, ..., 4305302])
         ex_event_still_id_list: List[int] = Field(default_factory=list, description="至今为止发现的回忆事件列表") # [8000001, ...]
         # campaign_list: list = Field(default_factory=list)
+        round_event_data: Optional['PcrApi.round_event_data'] = Field(None, description="金字塔事件。如果没有的话则为 None")
 
     async def travel__top_async(self, travel_area_id: int, get_ex_equip_album_flag: int = 1) -> travel__top:
         """
         Args:
-            travel_area_id (int): 目前只有 11001(朱庇特树海)
-            get_ex_equip_album_flag (int): 0/1
+            travel_area_id (int): 11001(朱庇特树海) 11002(玛丘利湾口) 11003(斯卡蒂亚山脉)
+            get_ex_equip_album_flag (int): 0/1 客户端第一次进入传1 后续传0
         Raises:
             PcrApiException
         """
@@ -963,6 +972,32 @@ class PcrApi:
             PcrApiException
         """
         return PcrApi.travel__receive_top_event_reward(**(await self.CallApi("/travel/receive_top_event_reward", {"top_event_appear_id": top_event_appear_id, "choice_number": choice_number})))
+
+    class current_round_result(BaseModel):
+        result: int = Field(..., description="1=成功 2=失败")
+        result_drama_id: int = Field(..., examples=[3000, 3100])
+        reward_list: Optional[List['PcrApi.reward']] = None
+        
+    class next_round_event_data(BaseModel):
+        round: int = Field(..., description="当前在第几层", examples=[1, 2, 3])
+        left_door_effect_id: int = Field(..., examples=[900000])
+        right_door_effect_id: int = Field(..., examples=[900000])
+        expect_reward_list: List[Dict] = Field(default_factory=list) 
+        
+    class travel__result_round_event(BaseModel):
+        current_round_result: 'PcrApi.current_round_result'
+        next_round_event_data: Optional['PcrApi.next_round_event_data'] = None
+        
+    async def travel__result_round_event_async(self, round: int, select_door_id: int) -> travel__result_round_event:
+        """
+        金字塔事件
+        Args:
+            round (int): 当前在第几层
+            select_door_id (int): 选左门=1，选右门=2
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.travel__result_round_event(**(await self.CallApi("/travel/result_round_event", {"round": round, "select_door_id": select_door_id})))
 
     # 后续测试
     class ex_auto_recycle_option(BaseModel):

@@ -507,21 +507,21 @@ async def season_accept_all(account_info) -> str:
         return f'Fail. 获取主页信息失败：{e}'
 
     if "season_ticket" not in home_index:
-        return 'Abort. 女神庆典未开放，已自动关闭该功能'
+        return 'Abort. 美食嘉年华未开放，已自动关闭该功能'
 
     season_ticket = home_index["season_ticket"]
     season_id = season_ticket["season_id"]
     mission_list = season_ticket["missions"]
     mission_cnt = len([x for x in mission_list if x["mission_status"] == 1])
     if mission_cnt == 0:
-        return 'Skip. 没有未领取的女神庆典任务奖励'
+        return 'Skip. 没有未领取的美食嘉年华任务奖励'
 
     try:
         ret = await query.query(account_info, "/season_ticket_new/accept", {"season_id": season_id, "mission_id": 0})
     except Exception as e:
-        return f'Fail. 领取女神庆典任务奖励失败：{e}'
+        return f'Fail. 领取美食嘉年华任务奖励失败：{e}'
 
-    return f'Succeed. 成功领取女神庆典任务奖励{mission_cnt}项，当前祝福等级{ret["seasonpass_level"]}'
+    return f'Succeed. 成功领取美食嘉年华任务奖励{mission_cnt}项，当前美食等级{ret["seasonpass_level"]}'
 
 
 async def mission_accept_all(account_info) -> str:
@@ -604,7 +604,7 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Error, '探险未解锁。请先通关主线冒险 18-1(普通难度)')
 
     try:
-        travel_top_res = await pcrClient.travel__top_async(11001, 0)
+        travel_top_res = await pcrClient.travel__top_async(11003, 0)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取探险信息失败：{e}')
     
@@ -620,20 +620,71 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
                 _ = await pcrClient.travel__receive_top_event_reward_async(event.top_event_appear_id, 1 if event.top_event_id in [4007, 4009] else 0)
             except PcrApiException as e:
                 return Outputs.FromStr(OutputFlag.Error, f'触发探险事件 {event.top_event_id} 失败：{e}')
-        outputs.append(OutputFlag.Succeed, f'触发了 {len(events)} 个探险事件')
+        outputs.append(OutputFlag.Succeed, f'触发了{len(events)}个探险事件。')
 
+    # 触发金字塔事件
+    round_event_data = travel_top_res.round_event_data
+    if round_event_data is None:
+        outputs.append(OutputFlag.Skip, '没有新的金字塔事件。')
+    else:
+        current_round = round_event_data.round
+        res = ["触发了金字塔事件。"]
+        if current_round > 1:
+            res.append(f'当前位于第{current_round}层。')
+        while True:
+            if current_round > 10:
+                res.append(f'AssertionError: `current_round` got [{current_round}], expected [1-10].')
+                outputs.append(OutputFlag.Error, ' '.join(res))
+                break
+            
+            try:
+                select_door_id = random.choice((1, 2))
+                round_result = await pcrClient.travel__result_round_event_async(current_round, select_door_id)
+            except Exception as e:
+                res.append(f'触发金字塔事件(round={current_round}, select_door_id={select_door_id})失败：({type(e)}){e}')
+                outputs.append(OutputFlag.Error, ' '.join(res))
+                break
+
+            if round_result.current_round_result.result == 1:
+                res.append(f'第{current_round}层成功。')
+                if round_result.next_round_event_data is None:
+                    outputs.append(OutputFlag.Succeed, ' '.join(res))
+                    break
+                next_round = round_result.next_round_event_data.round
+                if next_round != current_round + 1:
+                    res.append(f'AssertionError: `round_result.next_round_event_data.round` got [{next_round}], expected [{current_round + 1}].')
+                    outputs.append(OutputFlag.Error, ' '.join(res))
+                    break
+                current_round = next_round
+                continue
+            
+            if round_result.current_round_result.result == 2:
+                res.append(f'第{current_round}层失败。')
+                outputs.append(OutputFlag.Succeed, ' '.join(res))
+                break
+            
+            if round_result.current_round_result.result == 3:
+                res.append(f'第{current_round}层获取奖励，但止步于此。')
+                outputs.append(OutputFlag.Succeed, ' '.join(res))
+                break
+
+            res.append(f'AssertionError: `round_result.current_round_result.result` got [{round_result.current_round_result.result}], expected [1, 2, 3].')
+            outputs.append(OutputFlag.Error, ' '.join(res))
+            break
+    
     travel_quests = travel_top_res.travel_quest_list
     MAX_TRAVEL_TEAMS = 3
     if len(travel_quests) < MAX_TRAVEL_TEAMS:
-        outputs.append(OutputFlag.Warn, f'当前探险队伍数量 {len(travel_quests)} 小于最大值 {MAX_TRAVEL_TEAMS}。本脚本暂不支持自动配队，请手动补满队伍')
+        outputs.append(OutputFlag.Warn, f'当前探险队伍数量[{len(travel_quests)}]小于最大值[{MAX_TRAVEL_TEAMS}]。本脚本暂不支持自动配队，请手动补满队伍。')
     if len(travel_quests) == 0:
-        outputs.append(OutputFlag.Skip, "当前没有正在探险的队伍")
+        outputs.append(OutputFlag.Skip, "当前没有正在探险的队伍。")
         return outputs
 
     try:
         current_timestamp = await pcrClient.GetServerTime()
     except PcrApiException as e:
-        return Outputs.FromStr(OutputFlag.Error, f'获取当前服务器时间失败：{e}')    
+        outputs.append(OutputFlag.Error, f'获取当前服务器时间失败：{e}')
+        return outputs
     
     need_receive_team_count = 0
     start_travel_quest_list: List[PcrApi.start_travel_quest] = []
@@ -653,7 +704,7 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
                 add_lap_travel_quest_list.append(PcrApi.add_lap_travel_quest(travel_id=q.travel_id, add_lap_count=可追加次数))
     
     if need_receive_team_count == 0:
-        outputs.append(OutputFlag.Skip, '没有可收取的探险奖励')
+        outputs.append(OutputFlag.Skip, '没有可收取的探险奖励。')
     else:
         try:
             _ = await pcrClient.travel__receive_all_async(PcrApi.ex_auto_recycle_option(rarity=[], frame=[], category=[]))
@@ -661,11 +712,11 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
             outputs.append(OutputFlag.Error, f'一键收取探险奖励失败：{e}')
             return outputs
         else:
-            outputs.append(OutputFlag.Succeed, f'成功收取 {need_receive_team_count} 个队伍的探险奖励')
+            outputs.append(OutputFlag.Succeed, f'成功收取{need_receive_team_count}个队伍的探险奖励。')
             # TODO: 解析奖励
     
     if len(start_travel_quest_list) == 0 and len(add_lap_travel_quest_list) == 0:
-        outputs.append(OutputFlag.Skip, '没有需重新出发或追加次数的探险队伍')
+        outputs.append(OutputFlag.Skip, '没有需重新出发或追加次数的探险队伍。')
     else:
         try:
             jewel = await pcrClient.u_get_total_jewel_async()
@@ -692,12 +743,12 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
             return outputs
         else:
             if start_travel_quest_list:
-                outputs.append(OutputFlag.Succeed, f'{len(start_travel_quest_list)} 个队伍成功重新出发')
+                outputs.append(OutputFlag.Succeed, f'{len(start_travel_quest_list)}个队伍成功重新出发。')
             if add_lap_travel_quest_list:
-                outputs.append(OutputFlag.Succeed, f'{len(add_lap_travel_quest_list)} 个队伍成功追加次数')
+                outputs.append(OutputFlag.Succeed, f'{len(add_lap_travel_quest_list)}个队伍成功追加次数。')
     
     target_map_ids = sorted([f'{x.travel_quest_id // 1000 % 10}-{x.travel_quest_id % 10}' for x in travel_quests])
-    outputs.append(OutputFlag.Info, f'当前探险队伍：{", ".join(target_map_ids)}')
+    outputs.append(OutputFlag.Info, f'当前探险队伍：{", ".join(target_map_ids)}.')
     
     return outputs
 
@@ -1473,8 +1524,8 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         return f'Skip. 您未通关任何地下城地图'
     
     # 在特别地下城期间把以下两行取消注释即可。后续更新。
-    # if not allow_dungeon_sweep_during_sp:
-    #     return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
+    if not allow_dungeon_sweep_during_sp:
+        return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
     
     if mode == "max":
         max_dungeon_id = max(dungeon_id2name.keys())
@@ -1906,7 +1957,7 @@ async def free_gacha_special_event(account_info):
             msg.append(f'Info. 自动选择精选角色成功')
     if selected_gacha_type in [GachaType.附奖, GachaType.附奖自选精选] and selected_gacha["selected_item_id"] == 0:
         try:
-            res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100106, "item_id": 31077})
+            res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100108, "item_id": 31265})
             # temp TODO modifiy
             # 20240227:100058/31170
             # 20240423:100065/31180富婆
@@ -1916,6 +1967,7 @@ async def free_gacha_special_event(account_info):
             # 20250227:100094/31182美空
             # 20250410:100097/31233涅亚
             # 20250622:100106/31077水女仆
+            # 20250701:100108/31265莱拉耶尔
         except Exception as e:
             msg.append(f'Fail. 检测到当前为复刻池，但自动设置附奖扭蛋奖品角色失败：{e}')
             return " ".join(msg)
@@ -2064,7 +2116,7 @@ async def event_gacha(account_info, event_id_list=None):
             msg.append(f'Fail. 活动{event_id}获取当前讨伐列表失败：{e}')
             continue
         if gacha_step < 6:
-            msg.append(f'Abort. 目前仅支持自动交换第{6}轮及以后的列表')
+            msg.append(f'Abort. 活动{event_id}交换讨伐证中止：目前仅支持自动交换第{6}轮及以后的列表')
             continue
         try:
             res = await query.query(account_info, "/event/hatsune/gacha_exec", {"event_id": event_id, "gacha_id": event_id, "gacha_times": gacha_cnt, "current_cost_num": gacha_cnt, "loop_box_multi_gacha_flag": 1})
@@ -2820,7 +2872,7 @@ async def get_event_id_list(account_info, sweep_type: str = "all", only_open: bo
 
     try:
         load_index = await query.get_load_index(account_info)
-        for event in load_index["event_statuses"]:
+        for event in load_index.get("event_statuses", []):
             if event["event_type"] == 1:
                 if only_open:
                     if event["period"] == 2:
@@ -2863,10 +2915,10 @@ async def event_vh_boss_sweep(account_info, event_id_list=None):
             boss_battle_infos = [x for x in data["boss_battle_info"] if x["boss_id"] == int(f'{event_id}03')]
             assert len(boss_battle_infos) == 1, f'got {len(boss_battle_info)} boss_battle_info for boss_id {event_id}03'
             boss_battle_info = boss_battle_infos[0]
-            assert "oneblow_kill_count" in boss_battle_info, f'no oneblow_kill_count in boss_battle_info for boss_id {event_id}03'
-            oneblow_kill_count = boss_battle_info["oneblow_kill_count"]
-            assert "daily_kill_count" in boss_battle_info, f'no daily_kill_count in boss_battle_info for boss_id {event_id}03'
-            daily_kill_count = boss_battle_info["daily_kill_count"]
+            #assert "oneblow_kill_count" in boss_battle_info, f'no oneblow_kill_count in boss_battle_info for boss_id {event_id}03'
+            oneblow_kill_count = boss_battle_info.get("oneblow_kill_count", 0)
+            #assert "daily_kill_count" in boss_battle_info, f'no daily_kill_count in boss_battle_info for boss_id {event_id}03'
+            daily_kill_count = boss_battle_info.get("daily_kill_count", 0)
         except Exception as e:
             msg.append(f'Fail. 获取活动{event_id}信息失败：{e}')
             continue
@@ -3840,7 +3892,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11065006: 1, 11065007: 1, 11065008: 1, 11065009: 1, 11065010: 1})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11066006: 1, 11066007: 1, 11066008: 1, 11066009: 1, 11066010: 1})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
@@ -4853,8 +4905,8 @@ async def axistest(*args):
     
 async def test_on_startup():
     dic = get_sec()
-    account_info = dic["02"]
-    pcrClient = PcrApi(get_sec()["02"])
+    account_info = dic["981082801"]
+    pcrClient = PcrApi(account_info)
     await pcrClient.Login(always_call_login_and_check=True)
 
-    print(await free_gacha_special_event(account_info))
+    print(await travel_routine(pcrClient))
