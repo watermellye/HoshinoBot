@@ -1524,8 +1524,8 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         return f'Skip. 您未通关任何地下城地图'
     
     # 在特别地下城期间把以下两行取消注释即可。后续更新。
-    if not allow_dungeon_sweep_during_sp:
-        return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
+    # if not allow_dungeon_sweep_during_sp:
+    #     return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
     
     if mode == "max":
         max_dungeon_id = max(dungeon_id2name.keys())
@@ -3892,7 +3892,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
                 break
             
             if config["allin_normal_temp"]:
-                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11066006: 1, 11066007: 1, 11066008: 1, 11066009: 1, 11066010: 1})}'])
+                progress.append(["allin_normal_temp", f'{await allin_N2(account_info, {11066008: 1, 11066009: 1, 11066010: 1})}'])
             if config["event_normal_5"] != "disabled":
                 ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
                 if '当前无开放的活动' in ret:
