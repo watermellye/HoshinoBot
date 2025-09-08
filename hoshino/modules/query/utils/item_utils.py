@@ -12,9 +12,5 @@ def get_item_name(item_id: Union[int, str]) -> str:
     return item_data.id2name.get(int(item_id_str), str(item_id))
 
 
-def get_item_2_map_list(item_id: Union[int, str]) -> List[int]:
-    return item_data.id2maplist.get(int(item_id), [])
-
-
 def get_map_2_item_list(map_id: Union[int, str]) -> List[int]:
     return item_data.map2idlist.get(int(map_id), [])

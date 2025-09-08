@@ -1,5 +1,5 @@
-# AutoPCR
-AutoPCR的说明详见repo目录中`hoshino/modules/README.md`
+怡宝 fork 版的 hoshino 的说明和部署详见repo目录中`hoshino/modules/README.md`。
+为了避免混淆，已将原始仓库的（位于根目录下的）`requirements.txt`删除。
 
 以下为HoshinoBot的README。
 

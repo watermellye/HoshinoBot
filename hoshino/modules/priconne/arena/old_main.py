@@ -116,7 +116,7 @@ async def cut_image(image, hash_size=16):
     :return list[int]
     '''
 
-    image1 = image.resize((hash_size + 1, hash_size), Image.ANTIALIAS).convert('L')
+    image1 = image.resize((hash_size + 1, hash_size), Image.LANCZOS).convert('L')
     pixel = list(image1.getdata())
     return pixel
 
@@ -350,7 +350,7 @@ async def getPos(img: Image):
                         pos_x = 16 + icon_size * col_index
                         pos_y = 16 * (row_index + 1) + icon_size * 2 * row_index
                         x, y, w, h = arr[row_index][4 - col_index]
-                        cropped = img.crop([x + 2, y + 2, x + w - 2, y + h - 2]).resize((64, 64), Image.ANTIALIAS)
+                        cropped = img.crop([x + 2, y + 2, x + w - 2, y + h - 2]).resize((64, 64), Image.LANCZOS)
                         compare_img.paste(cropped, (pos_x, pos_y), cropped)  # 要不要加cropped
                         c = chara.fromid(arr_id_6[row_index][4 - col_index] // 100, arr_id_6[row_index][4 - col_index] % 100 // 10)
                         icon = await c.render_icon(icon_size)
@@ -365,7 +365,7 @@ async def getPos(img: Image):
                 outpImg = Image.blend(outpImg, actual_img, 0.2)
                 outpImg.alpha_composite(outpImgText)
                 ratio = max(1, max((outpImg.size)[0], (outpImg.size)[1]) / 500)
-                outpImg = outpImg.resize((int((outpImg.size)[0] / ratio), int((outpImg.size)[1] / ratio)), Image.ANTIALIAS)
+                outpImg = outpImg.resize((int((outpImg.size)[0] / ratio), int((outpImg.size)[1] / ratio)), Image.LANCZOS)
 
                 return arr_id, f'{outp_b64(outpImg)}\n{outp_b64(compare_img)}'
 
@@ -388,7 +388,7 @@ async def getPos(img: Image):
 
 
 async def getUnit(img2):
-    img2 = img2.convert("RGB").resize((128, 128), Image.ANTIALIAS)
+    img2 = img2.convert("RGB").resize((128, 128), Image.LANCZOS)
     img3 = np.array(img2)
     img4 = img3[25:96, 8:97, :]
     img4 = Image.fromarray(img4)

@@ -8,7 +8,8 @@
 
 注意是`hoshino/modules`下的`environment.yml`或`requirements.txt`，根目录下的是HoshinoBot原版所需的。
 
-清日常模块建议额外安装`Firefox浏览器`和`Chrome浏览器`，否则将使用`matplotlib`模块绘制结果。若不安装，请参考下方模块中的说明解决`matplotlib`模块的中文渲染问题。
+清日常模块建议额外安装`Firefox浏览器` **和** `Chrome浏览器`，否则将使用`matplotlib`模块绘制结果。
+（20250824更新：貌似不用装`Firefox浏览器`了，但是需要单独运行`geckodriver.exe`，放在`hoshino/modules/priconne/pcr_secret`下了）
 
 对于windows用户：
 - 建议使用 Windows 10 及以上，或Windows Server 2019及以上。如果遇到各种dll缺失问题，建议直接安装 Visual Studio 2019 及其C++桌面开发模块。
@@ -31,14 +32,10 @@
 清日常模块于2022年初开始，最初功能为刷取心碎和星球杯的300体，以便早班刀手代刀。随后逐渐扩充出账号管理，box管理，以及完整的清日常功能。由于作者编程水平很菜，该模块中的`priconne/pcr_secert`, `priconne/myweb`, `autobox`部分代码未遵循任何python开发规范，且已堆成“屎山”，即使作者难以阅读、修改，将逐渐重构。
 
 ## 关于清日常结果图片渲染问题
-（视`dataframe_image`三方库的版本），其中可能有平台特定的代码。对于 Windows 用户，请检查：`dataframe_image\_screenshot.py`中是否有：
-```python
-if os.geteuid() == 0:
-    args.append("--no-sandbox")
-```
-如有（类似）这样的代码，请注释掉。
 
-## 解决`matplotlib`模块的中文渲染问题
+### 解决`matplotlib`模块的中文渲染问题
+当浏览器渲染失败时，会回退到使用`matplotlib`模块渲染。此时中文会无法显示。解决方法如下：
+
 1. 通过运行以下代码来获取路径。路径应形如：`...\Lib\site-packages\matplotlib\mpl-data\matplotlibrc`。
 ```
 import matplotlib
@@ -50,9 +47,9 @@ font.sans-serif: SimHei, DejaVu Sans, Bitstream Vera Sans, Computer Modern Sans 
 ```
 （注意：开头的`#`需要去除）
 3. 如果你的操作系统没有黑体字体，请下载`simhei.ttf`，加入`...\Lib\site-packages\matplotlib\mpl-data\fonts\`下。
-4. 删除`C:\Users\<你的用户名>\.matplotlib\`文件夹，随后重启HoshinoBot。
+4. 删除`%USERPROFILE%\.matplotlib\`文件夹，随后重启HoshinoBot。
 
-另，已知`dataframe_image`模块在某些实例上存在输出图片过度裁剪问题。基本不影响使用，若感兴趣可自行尝试进入源码debug并修复。
+另，已知`dataframe_image`模块在某些实例上存在输出图片过度裁剪问题。基本不影响使用，若感兴趣可自行尝试进入源码debug并修复。（20250824 更新：目前似乎已无此问题。）
 
 ## 重构计划
 新版AutoPCR已进入开发。部分新版AutoPCR的改进和新特性列举如下：
