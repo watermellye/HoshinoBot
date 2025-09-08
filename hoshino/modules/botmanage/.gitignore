@@ -2,6 +2,7 @@
 !/.gitignore
 !/get_friend_info.py
 !/get_group_info.py
+!/help.png
 !/data/
 /data/*
 !.gitkeep
