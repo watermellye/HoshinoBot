@@ -1524,8 +1524,8 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         return f'Skip. 您未通关任何地下城地图'
     
     # 在特别地下城期间把以下两行取消注释即可。后续更新。
-    if not allow_dungeon_sweep_during_sp:
-        return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
+    # if not allow_dungeon_sweep_during_sp:
+    #     return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
     
     if mode == "max":
         max_dungeon_id = max(dungeon_id2name.keys())
@@ -2779,9 +2779,9 @@ async def _event_sweep(account_info, quest_id, x_remain, buy_stamina_passive_max
     s = []
 
     identify_code = quest_id % 1000
-    if identify_code in [101, 102, 103, 104, 105]:
+    if identify_code in [101, 102, 103]:
         stamina_take = 8
-    elif identify_code in [106, 107, 108, 109, 110]:
+    elif identify_code in [104, 105, 106, 107, 108, 109, 110]:
         stamina_take = 9
     elif identify_code in [111, 112, 113, 114, 115]:
         stamina_take = 10
@@ -3447,7 +3447,7 @@ async def advice_normal_smart_interface(bot, ev):
     try:
         await query.VerifyAccount(account_info)
     except Exception as e:
-        await bot.finish(f'尝试登录[{nam}]失败：{e}')
+        await bot.finish(ev, f'尝试登录[{nam}]失败：{e}')
     else:
         await bot.send(ev, f'{nam}\n{await advice_normal_smart(account_info)}')
 
