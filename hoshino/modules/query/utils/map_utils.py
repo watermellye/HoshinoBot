@@ -11,11 +11,11 @@ class PCRMap:
         self.event_id = 0
 
     @property
-    def name(self) -> str:  # 请重写该函数
+    def name(self) -> str: # 请重写该函数
         raise Exception("Base Class")
 
     @property
-    def id(self) -> int:  # 请重写该函数
+    def id(self) -> int: # 请重写该函数
         raise Exception("Base Class")
 
     @property
@@ -38,9 +38,14 @@ class PCRMap:
         该地图是复刻活动图
         '''
         return False
+    
+    def __repr__(self):
+        return self.name
+
+    
 
 
-class MainPCRMap(PCRMap):  # 主线
+class MainPCRMap(PCRMap): # 主线
     @unique
     class MainPCRMapSubType(IntEnum):
         N = 11000000
@@ -64,7 +69,7 @@ class MainPCRMap(PCRMap):  # 主线
         return f'{self.subtype.name}{self.major}-{self.minor}'
 
     @property
-    def id(self) -> int:  # "N33-6" -> 11033006
+    def id(self) -> int: # "N33-6" -> 11033006
         return self.subtype.value + self.major * 1000 + self.minor
 
     @property
@@ -91,7 +96,7 @@ class MainPCRMap(PCRMap):  # 主线
         return 0
 
 
-class EventPCRMap(PCRMap):  # 活动
+class EventPCRMap(PCRMap): # 活动
     @unique
     class EventPCRMapSubType(IntEnum):
         N = 100
@@ -115,7 +120,7 @@ class EventPCRMap(PCRMap):  # 活动
         return f'{"复刻"if self.is_rerun() else ""}活动{self.event_id}|{self.subtype.name}{self.major}-{self.minor}'
 
     @property
-    def id(self) -> int:  # "活动H1-3" -> xxxxx203
+    def id(self) -> int: # "活动H1-3" -> xxxxx203
         return self.event_id * 1000 + self.subtype.value + self.minor
 
     @property
@@ -141,7 +146,7 @@ class EventPCRMap(PCRMap):  # 活动
         return 20000 < self.event_id < 29999
 
 
-class ExplorePCRMap(PCRMap):  # 调查
+class ExplorePCRMap(PCRMap): # 调查
     @unique
     class ExplorePCRMapSubType(IntEnum):
         心碎 = 18001000
@@ -177,44 +182,86 @@ class ExplorePCRMap(PCRMap):  # 调查
             return 15
 
 
+class TalentPCRMap(PCRMap): # 深域
+    @unique
+    class TalentPCRMapSubType(IntEnum):
+        火 = 81001000
+        水 = 82001000
+        风 = 83001000
+        光 = 84001000
+        暗 = 85001000
+
+    def __init__(self, map_id: int): # 82001030 -> 水3-10
+        super().__init__()
+        if map_id // 1000 * 1000 not in [e.value for e in self.TalentPCRMapSubType] or map_id % 1000 == 0:
+            raise ValueError(f'无法识别的深域地图ID: {map_id}')
+        self.subtype = self.TalentPCRMapSubType(map_id // 1000 * 1000)
+        self.major = (map_id % 1000 - 1) // 10 + 1
+        self.minor = (map_id % 1000 - 1) % 10 + 1
+        self.__id = map_id
+
+    @property
+    def name(self) -> str:
+        return f'{self.subtype.name}{self.major}-{self.minor}'
+
+    @property
+    def id(self) -> int:
+        return self.__id
+
+    @property
+    def stamina(self) -> int:
+        '''
+        扫荡一次该地图所需的体力
+        '''
+        return 10
+
+    talent_stamina_cost = 10  # for static access
+
 def from_id(map_id: Union[int, str]) -> PCRMap:
     '''
     :returns: 由于python没有虚函数，因此实际返回的是PCRMap的某个子类。写成返回PCRMap基类，是为了为了语法提示能工作。
     :raise Exception: map_id无法匹配任何已知的地图
     '''
 
-    map_id = str(map_id)
-    res = re.findall(r"11(\d{3})(\d{3})", map_id)
+    map_id_str = str(map_id)
+    map_id_int = int(map_id)
+
+    res = re.findall(r"11(\d{3})(\d{3})", map_id_str)
     if res:
         return MainPCRMap("N", int(res[0][0]), int(res[0][1]))
-    res = re.findall(r"12(\d{3})(\d{3})", map_id)
+    res = re.findall(r"12(\d{3})(\d{3})", map_id_str)
     if res:
         return MainPCRMap("H", int(res[0][0]), int(res[0][1]))
-    res = re.findall(r"13(\d{3})(\d{3})", map_id)
+    res = re.findall(r"13(\d{3})(\d{3})", map_id_str)
     if res:
         return MainPCRMap("VH", int(res[0][0]), int(res[0][1]))
 
-    res = re.findall(r"18001(\d{3})", map_id)
+    res = re.findall(r"18001(\d{3})", map_id_str)
     if res:
         return ExplorePCRMap("心碎", int(res[0]))
-    res = re.findall(r"19001(\d{3})", map_id)
+    res = re.findall(r"19001(\d{3})", map_id_str)
     if res:
         return ExplorePCRMap("星球杯", int(res[0]))
-    res = re.findall(r"21001(\d{3})", map_id)
+    res = re.findall(r"21001(\d{3})", map_id_str)
     if res:
         return ExplorePCRMap("MANA", int(res[0]))
-    res = re.findall(r"21002(\d{3})", map_id)
+    res = re.findall(r"21002(\d{3})", map_id_str)
     if res:
         return ExplorePCRMap("EXP", int(res[0]))
 
-    res = re.findall(r"([1|2]0\d{3})1(\d{2})", map_id)
+    res = re.findall(r"([1|2]0\d{3})1(\d{2})", map_id_str)
     if res:
         return EventPCRMap("N", int(res[0][1]), int(res[0][0]))
-    res = re.findall(r"([1|2]0\d{3})2(\d{2})", map_id)
+    res = re.findall(r"([1|2]0\d{3})2(\d{2})", map_id_str)
     if res:
         return EventPCRMap("H", int(res[0][1]), int(res[0][0]))
-    raise Exception(f'无法识别地图{map_id}')
+    
+    if map_id_int // 1000 * 1000 in [e.value for e in TalentPCRMap.TalentPCRMapSubType]:
+        return TalentPCRMap(map_id_int)
+    
+    raise Exception(f'无法识别地图{map_id_str}')
 
 
 if __name__ == "__main__":
-    pass
+    talent_map: TalentPCRMap = from_id(82001030)
+    print(talent_map)

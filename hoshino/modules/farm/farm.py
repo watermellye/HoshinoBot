@@ -1125,7 +1125,7 @@ async def CreateClan(pcrid: int, clan_name: str, description: str = "") -> Outpu
         return Outputs.FromStr(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
     
     try:
-        res = await pcrClient.CreateClan(PcrApi.CreateClanRequest(clan_name=clan_name, description=description))
+        res = await pcrClient.clan__create__async(PcrApi.clan__create_request(clan_name=clan_name, description=description))
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'[{pcrid}]创建公会[{clan_name}]失败：{e}')
 
@@ -1170,7 +1170,7 @@ async def InviteToClan(leader_pcrid: int, invited_pcrid: int) -> Outputs:
         return Outputs.FromStr(OutputFlag.Error, f'获取账号[{leader_pcrid}]信息失败：{e}')
 
     try:
-        invitedProfile = await leaderPcrClient.GetProfile(invited_pcrid)
+        invitedProfile = await leaderPcrClient.profile__get_profile_async(invited_pcrid)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]查看账号[{invited_pcrid}]信息失败：{e}')
     
@@ -1178,7 +1178,7 @@ async def InviteToClan(leader_pcrid: int, invited_pcrid: int) -> Outputs:
         return Outputs.FromStr(OutputFlag.Abort, f'账号[{invited_pcrid}]已在公会[{invitedProfile.clan_name}]，无法邀请')
     
     try:
-        await leaderPcrClient.ClanInvite(PcrApi.ClanInviteRequest(invited_pcrid))
+        await leaderPcrClient.clan__invite_async(PcrApi.clan__invite_request(invited_pcrid))
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'使用会长账号[{leader_pcrid}]邀请账号[{invited_pcrid}]加入公会失败：{e}')
 
@@ -1218,7 +1218,7 @@ async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
         return Output(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
 
     try:
-        invitedClans = await pcrClient.GetInvitedClans()
+        invitedClans = await pcrClient.clan__invited_clan_list_async()
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'查看账号[{pcrid}]被公会邀请信息失败：{e}')
     
@@ -1230,7 +1230,7 @@ async def AcceptClanInvite(pcrid: int, inviter_pcrid: int) -> Outputs:
         return Outputs.FromStr(OutputFlag.Skip, f'账号[{pcrid}]未被会长账号[{inviter_pcrid}]邀请')
     targetClanId = targetClan[0]
     try:
-        await pcrClient.AcceptClanInvite(targetClanId)
+        await pcrClient.u_accept_clan_invite_async(targetClanId)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'账号[{pcrid}]收到公会[{targetClanId}]邀请，但同意请求失败：{e}')
     
@@ -1277,7 +1277,7 @@ async def KickFromClan(leader_pcrid: int, member_pcrid: int) -> Output:
         return Output(OutputFlag.Error, f'获取账号[{leader_pcrid}]信息失败：{e}')
     
     try:
-        clan_info = await leader_pcrclient.GetClanInfo()
+        clan_info = await leader_pcrclient.clan__info_async()
     except Exception as e:
         return Output(OutputFlag.Error, f'无法获取账号[{leader_pcrid}]所在公会的详细信息')
     
@@ -1290,27 +1290,27 @@ async def KickFromClan(leader_pcrid: int, member_pcrid: int) -> Output:
     members = clan_info.clan.members
     if any(True for x in members if x.viewer_id == member_pcrid): # Is in clan
         try:
-            _ = await leader_pcrclient.RemoveFromClan(member_pcrid)
+            _ = await leader_pcrclient.clan__remove_async(member_pcrid)
         except PcrApiException as e:
             return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})失败：{e}')
         else:
             return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})成功')
     
-    join_requests = await leader_pcrclient.GetClanJoinRequestList(clan_id)
+    join_requests = await leader_pcrclient.clan__join_request_list_async(clan_id)
     if any(True for x in join_requests if x.viewer_id == member_pcrid): # Is in join request list
         try:
-            _ = await leader_pcrclient.RejectClanJoinRequest(clan_id, member_pcrid)
+            _ = await leader_pcrclient.clan__join_request_reject_async(clan_id, member_pcrid)
         except PcrApiException as e:
             return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的入会申请列表失败：{e}')
         else:
             return Output(OutputFlag.Succeed, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的入会申请列表成功')
     
-    invite_users = await leader_pcrclient.GetClanInviteUserList(clan_id)
+    invite_users = await leader_pcrclient.clan__invite_user_list_async(clan_id)
     for x in invite_users:
         if x.viewer_id != member_pcrid:
             continue
         try:
-            _ = await leader_pcrclient.CancelClanInvite(x.invite_id)
+            _ = await leader_pcrclient.clan__cancel_invite_async(x.invite_id)
         except PcrApiException as e:
             return Output(OutputFlag.Error, f'使用会长号[{leader_pcrid}]将[{member_pcrid}]移出公会[{clan_name}]({clan_id})的邀请列表失败：{e}')
         else:
@@ -1377,7 +1377,7 @@ async def Rename(pcrid: int, name: int) -> Output:
         return Output(OutputFlag.Error, f'获取账号[{pcrid}]信息失败：{e}')
     
     try:
-        profile = await pcrclient.GetProfile(pcrid)
+        profile = await pcrclient.profile__get_profile_async(pcrid)
     except PcrApiException as e:
         return Output(OutputFlag.Error, f'获取账号[{pcrid}]的个人信息失败：{e}')
     
@@ -1385,7 +1385,7 @@ async def Rename(pcrid: int, name: int) -> Output:
         return Output(OutputFlag.Skip, f'账号[{pcrid}]的游戏内名称已为[{name}]，无需修改')
     
     try:
-        await pcrclient.Rename(name)
+        await pcrclient.profile__rename_async(name)
     except PcrApiException as e:
         return Output(OutputFlag.Error, f'账号[{pcrid}]由[{profile.user_info.user_name}]重命名为[{name}]失败：{e}')
     else:

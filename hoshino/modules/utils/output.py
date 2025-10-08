@@ -1,7 +1,8 @@
-from enum import Enum
+from enum import IntEnum, unique
 from typing import List
 
-class OutputFlag(Enum):
+@unique
+class OutputFlag(IntEnum):
     Empty = 0
     Debug = 1
     Info = 2
@@ -20,7 +21,7 @@ class Output:
     def ToStr(self, showFlag: bool = True) -> str:
         return f'{self.flag.name}: {self.content}' if showFlag else f'{self.content}'
     
-    def __str__(self):
+    def __repr__(self):
         return self.ToStr()
 
     def __add__(self, other):
@@ -36,10 +37,11 @@ class Output:
 class Outputs:
     #outputs:List[Output] = []
     
-    def __init__(self, outputs: List[Output] = None, showFlag: bool = True):
+    def __init__(self, outputs: List[Output] = None, showFlag: bool = True, log_level: OutputFlag = OutputFlag.Info):
         self.outputs = outputs or []
         self.showFlag = showFlag
-    
+        self.log_level = log_level
+
     @staticmethod
     def FromStr(flag: OutputFlag, content: str):
         return Outputs([Output(flag, content)])
@@ -54,22 +56,33 @@ class Outputs:
         return OutputFlag(max(x.flag.value for x in self.outputs))
     
     @property
+    def is_empty(self) -> bool:
+        return len(self.outputs) == 0
+    
+    @property
     def ResultStr(self) -> str:
         return self.Result.name
     
-    def ToStr(self, showFlag: bool = None, sep: str = None) -> str:
+    def ToStr(self, showFlag: bool = None, sep: str = None, log_level: OutputFlag = None) -> str:
         if showFlag is None:
             showFlag = self.showFlag
+        if log_level is None:
+            log_level = self.log_level
         if len(self.outputs) == 0 or all(x.flag == OutputFlag.Empty for x in self.outputs):
             return ""
         if len({x.flag for x in self.outputs}) == 1:
+            if self.outputs[0].flag < log_level:
+                return ""
             sep = sep or " "
             x = f'{self.outputs[0].flag.name}: '
             y = f'{sep.join([x.content for x in self.outputs])}'
             return f'{x if showFlag else ""}{y}'            
         sep = sep or "\n"
-        return sep.join(x.ToStr(showFlag) for x in self.outputs if x.flag != OutputFlag.Empty)
+        return sep.join(x.ToStr(showFlag) for x in self.outputs if x.flag != OutputFlag.Empty and x.flag >= log_level)
 
+    def __repr__(self):
+        return self.ToStr(sep=" ", log_level=OutputFlag.Debug)
+    
     def __str__(self):
         return self.ToStr()
     
@@ -83,7 +96,7 @@ class Outputs:
     def __iadd__(self, other):
         if isinstance(other, Output):
             self.outputs.append(other)
-            return self
+            return self # a = (b += c)
         elif isinstance(other, Outputs):
             self.outputs += other.outputs
             return self

@@ -214,8 +214,8 @@ async def 上传账号_all(bot: HoshinoBot, ev: CQEvent):
     pcrClient = PcrApi(dic[qqstr])
     try:
         await pcrClient.Login(True, True)
-        pcrname = await pcrClient.GetUsername()
-        pcrid = await pcrClient.GetPcrid()
+        pcrname = await pcrClient.u_get_username_async()
+        pcrid = await pcrClient.u_get_pcrid_async()
     except Exception as e:
         bot.finish(ev, f'账号登录失败，已置为错误状态，无法进行清日常\n原始报错：{e}')
     else:
@@ -441,8 +441,6 @@ async def get_target_account(bot, ev, is_strict):
     nam = account_info.get("pcrname", account_info.get("name", qqid))
     return account_info, qqid, nam
 
-
-stamina_short = False
 
 curpath = dirname(__file__)
 with open(join(curpath, 'equip_name.json'), "r", encoding="utf-8") as fp:
@@ -681,18 +679,18 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
         return outputs
 
     try:
-        current_timestamp = await pcrClient.GetServerTime()
+        current_timestamp = await pcrClient.u_get_server_time_async()
     except PcrApiException as e:
         outputs.append(OutputFlag.Error, f'获取当前服务器时间失败：{e}')
         return outputs
     
     need_receive_team_count = 0
-    start_travel_quest_list: List[PcrApi.start_travel_quest] = []
-    add_lap_travel_quest_list: List[PcrApi.add_lap_travel_quest] = []
+    start_travel_quest_list: List[PcrApi.travel__start__start_travel_quest] = []
+    add_lap_travel_quest_list: List[PcrApi.travel__start__add_lap_travel_quest] = []
     for q in travel_quests:
         if q.travel_end_time - q.decrease_time <= current_timestamp:
             need_receive_team_count += 1
-            start_travel_quest_list.append(PcrApi.start_travel_quest(travel_quest_id=q.travel_quest_id, travel_deck=q.travel_deck, decrease_time_item=PcrApi.decrease_time_item(jewel=0, item=0), total_lap_count=5))
+            start_travel_quest_list.append(PcrApi.travel__start__start_travel_quest(travel_quest_id=q.travel_quest_id, travel_deck=q.travel_deck, decrease_time_item=PcrApi.travel__start__start_travel_quest__decrease_time_item(jewel=0, item=0), total_lap_count=5))
         else:
             可追加次数 = 5 - (q.total_lap_count - q.received_count)
             一周回耗时 = (q.travel_end_time - q.travel_start_time) / q.total_lap_count
@@ -701,7 +699,7 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
                 need_receive_team_count += 1
                 可追加次数 += 可收取次数
             if 可追加次数 > 0:
-                add_lap_travel_quest_list.append(PcrApi.add_lap_travel_quest(travel_id=q.travel_id, add_lap_count=可追加次数))
+                add_lap_travel_quest_list.append(PcrApi.travel__start__add_lap_travel_quest(travel_id=q.travel_id, add_lap_count=可追加次数))
     
     if need_receive_team_count == 0:
         outputs.append(OutputFlag.Skip, '没有可收取的探险奖励。')
@@ -725,19 +723,19 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
             return outputs
         
         try:
-            item = await pcrClient.GetItemStock(23002)
+            item = await pcrClient.u_get_item_stock_async(23002)
         except PcrApiException as e:
             outputs.append(OutputFlag.Error, f'获取加速券数量失败：{e}')
             return outputs
 
         try:
             if len(start_travel_quest_list) > 0 and len(add_lap_travel_quest_list) > 0:
-                v = 9
+                action_type = 9
             elif len(start_travel_quest_list) > 0: # and len(add_lap_travel_quest_list) == 0
-                v = 2
+                action_type = 2
             else: # len(start_travel_quest_list) == 0 and len(add_lap_travel_quest_list) > 0
-                v = 8
-            _ = await pcrClient.travel__start_async(start_travel_quest_list, add_lap_travel_quest_list, [], PcrApi.action_type(value__=v), PcrApi.current_currency_num(jewel=jewel, item=item))
+                action_type = 8
+            _ = await pcrClient.travel__start_async(start_travel_quest_list, add_lap_travel_quest_list, [], action_type, PcrApi.travel__start__current_currency_num(jewel=jewel, item=item))
         except PcrApiException as e:
             outputs.append(OutputFlag.Error, f'探险队伍重新出发和/或追加次数失败：{e}')
             return outputs
@@ -748,7 +746,7 @@ async def travel_routine(pcrClient: PcrApi) -> Outputs:
                 outputs.append(OutputFlag.Succeed, f'{len(add_lap_travel_quest_list)}个队伍成功追加次数。')
     
     target_map_ids = sorted([f'{x.travel_quest_id // 1000 % 10}-{x.travel_quest_id % 10}' for x in travel_quests])
-    outputs.append(OutputFlag.Info, f'当前探险队伍：{", ".join(target_map_ids)}.')
+    outputs.append(OutputFlag.Info, f'当前探险队伍：{", ".join(target_map_ids)}')
     
     return outputs
 
@@ -979,6 +977,9 @@ async def clan_chara_support(account_info):
         return f'Fail. 获取角色列表失败：{e}'
     
     try:
+        clan_id = await query.get_clan_id_safe_async(account_info)
+        if clan_id == 0:
+            return 'Skip. 未加入公会'
         support_unit_setting = await query.get_support_unit_setting(account_info)
     except Exception as e:
         return f'Fail. 获取当前支援设定失败：{e}'
@@ -1060,7 +1061,9 @@ async def clan_equip_donation(account_info, item_type):
     except Exception as e:
         return f'Fail. 获取主页信息失败：{e}'
     try:
-        clan_id = await query.get_clan_id(account_info)
+        clan_id = await query.get_clan_id_safe_async(account_info)
+        if clan_id == 0:
+            return 'Skip. 未加入公会'
     except Exception as e:
         return f'Fail. 获取公会ID失败：{e}'
 
@@ -1100,9 +1103,11 @@ async def clan_equip_donation(account_info, item_type):
 
 async def clan_like(account_info):
     try:
-        clan_id = await query.get_clan_id(account_info)
+        clan_id = await query.get_clan_id_safe_async(account_info)
+        if clan_id == 0:
+            return 'Skip. 未加入公会'
     except Exception as e:
-        return f'Fail. 获取公会id失败：{e}'
+        return f'Fail. 获取公会ID失败：{e}'
     try:
         load_index = await query.get_load_index(account_info)
         if load_index["clan_like_count"] > 0:
@@ -1240,7 +1245,7 @@ async def sweep_explore(account_info, mode: str, friendly_name: str, api: str, q
     return '\n'.join(s)
 
 
-async def buy_exp(account_info, buy_cnt=1):
+async def buy_exp(account_info):
     try:
         mana = await query.get_mana(account_info)
     except Exception as e:
@@ -1263,9 +1268,9 @@ async def buy_exp(account_info, buy_cnt=1):
 
     threshold = 100000
     if exp_cnt.get(20004, 0) > threshold:
-        return f'Abort. 设定全局经验瓶阈值为{threshold}。当前拥有{exp_id2name[20004]}({exp_cnt[20004]})超过阈值。'
-    if exp_cnt.get(20005, 0) > threshold // 5:
-        return f'Abort. 设定全局经验瓶阈值为{threshold // 5}。当前拥有{exp_id2name[20005]}({exp_cnt[20005]})超过阈值。'
+        return f'Skip. 设定全局经验瓶阈值为{threshold}。当前拥有{exp_id2name[20004]}({exp_cnt[20004]})超过阈值。'
+    if exp_cnt.get(20005, 0) > threshold // 2:
+        return f'Skip. 设定全局经验瓶阈值为{threshold // 2}。当前拥有{exp_id2name[20005]}({exp_cnt[20005]})超过阈值。'
     
     if mana < 10000000:
         threshold = 0
@@ -1311,7 +1316,7 @@ async def buy_exp(account_info, buy_cnt=1):
     return f'Succeed. 购买当期通常商店所有经验瓶成功：{" ".join(outp)}'
 
 
-async def buy_stone(account_info, buy_cnt=1):
+async def buy_stone(account_info):
     try:
         mana = await query.get_mana(account_info)
     except Exception as e:
@@ -1383,7 +1388,7 @@ async def buy_exp_and_stone_shop(account_info, buy_exp_cnt=1, buy_stone_cnt=1):
     shop_id = 201
 
     if buy_exp_cnt < 1 and buy_stone_cnt < 1:
-        return ""
+        return "Skip."
 
     cnt = max(buy_exp_cnt, buy_stone_cnt)
 
@@ -1892,7 +1897,8 @@ async def get_gacha_free(account_info):
                     "exchange_id": 0,
                     "draw_type": 1,
                     "current_cost_num": -1,
-                    "campaign_id": 0
+                    "campaign_id": 0,
+                    "last_gacha_index_time": 0,
                 })
             except Exception as e:
                 return f'Fail. 抽取免费十连扭蛋失败：{e}'
@@ -1900,10 +1906,11 @@ async def get_gacha_free(account_info):
                 return f'Succeed. 抽取免费十连扭蛋成功'
 
 
-async def free_gacha_special_event(account_info):                  
+async def free_gacha_special_event(account_info):
     try:
-        data = await query.query(account_info, '/gacha/index')
+        data, data_header = await query.QueryWithHeader(account_info, '/gacha/index')
         assert "gacha_info" in data, f'返回字段不含["gacha_info"]'
+        servertime = data_header["servertime"]
     except Exception as e:
         return f'Fail. 获取扭蛋信息失败：{e}'
 
@@ -1957,7 +1964,7 @@ async def free_gacha_special_event(account_info):
             msg.append(f'Info. 自动选择精选角色成功')
     if selected_gacha_type in [GachaType.附奖, GachaType.附奖自选精选] and selected_gacha["selected_item_id"] == 0:
         try:
-            res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100108, "item_id": 31265})
+            res = await query.query(account_info, "/gacha/select_prize", {"prizegacha_id": 100124, "item_id": 31210})
             # temp TODO modifiy
             # 20240227:100058/31170
             # 20240423:100065/31180富婆
@@ -1968,6 +1975,7 @@ async def free_gacha_special_event(account_info):
             # 20250410:100097/31233涅亚
             # 20250622:100106/31077水女仆
             # 20250701:100108/31265莱拉耶尔
+            # 20251007:100124/31210佩可莉姆（超负荷） /31211凯露（超负荷）
         except Exception as e:
             msg.append(f'Fail. 检测到当前为复刻池，但自动设置附奖扭蛋奖品角色失败：{e}')
             return " ".join(msg)
@@ -1986,6 +1994,7 @@ async def free_gacha_special_event(account_info):
                 "draw_type": 6,  # 普通免费碎片扭蛋=1 150钻单抽/1500钻抽十连=2 单抽券/十连券单抽=3 免费十连=6 付费50钻=4 付费1500钻抽星3=?
                 "current_cost_num": i,  # 当前抽取所用的物品的数量（普通免费碎片扭蛋=-1 普通钻石抽=钻石数量 单抽券单抽=单抽券数量 免费十连活动抽=剩余免费十连次数 付费钻抽=付费钻数量
                 "campaign_id": data["campaign_info"]["campaign_id"], # 使用的不是活动免费十连的话则为0（需验证）
+                "last_gacha_index_time": servertime
             })
         except Exception as e:
             return f'Fail. 抽取免费十连失败：{e}'
@@ -2008,7 +2017,7 @@ async def free_gacha_special_event(account_info):
 
 async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
     try:
-        load_index_resident_info = await pcrClient.GetLoadIndexGachaResidentInfo()
+        load_index_resident_info = await pcrClient.load__index__resident_info_async()
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取特别凭证扭蛋活动举办信息失败：{e}')
     if load_index_resident_info is None:
@@ -2017,7 +2026,7 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Skip, f'特别凭证扭蛋活动已结束')
 
     try:
-        resident_info = await pcrClient.GetGachaResidentInfo()
+        resident_info = await pcrClient.gacha__resident_async()
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取特别凭证扭蛋信息失败：{e}')
     
@@ -2046,7 +2055,7 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
         success_cnt = 0
         for i in range(1, fg1_exec_cnt + 1):
             try:
-                gacha_exec_res = await pcrClient.GachaExec(PcrApi.GachaExecRequest(gacha_id=gacha_id, gacha_times=1, exchange_id=exchange_id, draw_type=9005, current_cost_num=current_cost_num, campaign_id=0))
+                gacha_exec_res = await pcrClient.gacha__exec_async(PcrApi.gacha__exec_request(gacha_id=gacha_id, gacha_times=1, exchange_id=exchange_id, draw_type=9005, current_cost_num=current_cost_num, campaign_id=0, last_gacha_index_time=0))
             except PcrApiException as e:
                 outputs.append(OutputFlag.Error, f'第 {i}/{fg1_exec_cnt} 次抽取特别凭证扭蛋失败：{e}')
                 break
@@ -2098,9 +2107,13 @@ async def event_gacha(account_info, event_id_list=None):
         if event_id == 10087: # 情相连心相系 复刻活动 前后篇共用一个池
             continue
         if str(event_id) not in event_gacha_info:
-            msg.append(f'Abort. 未记录活动{event_id}对应的扫荡券id，暂无法提供服务')
-            continue
-        event_gacha_item_id = event_gacha_info[str(event_id)]
+            if str(event_id - 1) in event_gacha_info:
+                event_gacha_item_id = event_gacha_info[str(event_id - 1)] + 10 # 前后篇活动
+            else:
+                msg.append(f'Abort. 未记录活动{event_id}对应的扫荡券id，暂无法提供服务')
+                continue
+        else:
+            event_gacha_item_id = event_gacha_info[str(event_id)]
         try:
             gacha_cnt = await query.get_item_stock(account_info, event_gacha_item_id)
         except Exception as e:
@@ -2113,10 +2126,10 @@ async def event_gacha(account_info, event_id_list=None):
             data = await query.query(account_info, "/event/hatsune/gacha_index", {"event_id": event_id, "gacha_id": event_id})
             gacha_step = data["event_gacha_info"]["gacha_step"]
         except Exception as e:
-            msg.append(f'Fail. 活动{event_id}获取当前讨伐列表失败：{e}')
+            msg.append(f'Fail. 活动{event_id}剩余{gacha_cnt}张讨伐证，但获取当前讨伐列表失败：{e}')
             continue
         if gacha_step < 6:
-            msg.append(f'Abort. 活动{event_id}交换讨伐证中止：目前仅支持自动交换第{6}轮及以后的列表')
+            msg.append(f'Abort. 活动{event_id}剩余{gacha_cnt}张讨伐证，但交换讨伐证失败：当前位于第{gacha_step}池，目前仅支持自动交换第{6}轮及以后的列表')
             continue
         try:
             res = await query.query(account_info, "/event/hatsune/gacha_exec", {"event_id": event_id, "gacha_id": event_id, "gacha_times": gacha_cnt, "current_cost_num": gacha_cnt, "loop_box_multi_gacha_flag": 1})
@@ -2236,13 +2249,13 @@ def stock2usage(stock: Dict[int, int], v: int) -> Dict[int, int]:
 
 async def give_gift(pcrClient: PcrApi) -> Outputs:
     try:
-        id42rarity = {id // 100: unit_info.unit_rarity for id, unit_info in (await pcrClient.GetUnitInfoDict()).items()}
+        id42rarity = {id // 100: unit_info.unit_rarity for id, unit_info in (await pcrClient.u_get_all_unit_info_async()).items()}
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取各角色当前星级失败：{e}')
     # 计算各角色满好感经验值
     id42love_max_exp = {id: 700 if rarity <= 2 else 4200 if rarity <= 5 else 16800 for id, rarity in id42rarity.items()}
     try:
-        id42love_now_exp = {id: love_info.chara_love for id, love_info in (await pcrClient.GetCharaLoveInfoDict()).items()}
+        id42love_now_exp = {id: love_info.chara_love for id, love_info in (await pcrClient.u_get_user_chara_info_dict_async()).items()}
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取各角色当前好感经验值失败：{e}')
     # 计算各角色还需要的好感经验值
@@ -2252,7 +2265,7 @@ async def give_gift(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Skip, "所有角色好感已满")
     
     try:
-        stock = {10: await pcrClient.GetItemStock(50001), 20: await pcrClient.GetItemStock(50002), 30: await pcrClient.GetItemStock(50003)}
+        stock = {10: await pcrClient.u_get_item_stock_async(50001), 20: await pcrClient.u_get_item_stock_async(50002), 30: await pcrClient.u_get_item_stock_async(50003)}
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取蛋糕库存数量失败：{e.__cause__}')
 
@@ -2262,21 +2275,21 @@ async def give_gift(pcrClient: PcrApi) -> Outputs:
     for id, needed_exp in sorted(id42love_needed_exp.items(), key=lambda item: item[1]):
         #print(f"{PcrApi.CharaOutputName(id)}需要{needed_exp}好感经验值")
         if stock[10] * 10 + stock[20] * 20 + stock[30] * 30 < needed_exp:
-            skipped.append(PcrApi.CharaOutputName(id))
+            skipped.append(PcrApi.u_get_chara_friendly_output(id))
             continue
         usage = stock2usage(stock, needed_exp)
         #print(f'库存={stock} 用量={usage}')
-        request: List[PcrApi.ItemInfoRequest] = []
+        request: List[PcrApi.room__multi_give_gift__item_info] = []
         for v, t in usage.items():
-            request.append(PcrApi.ItemInfoRequest(item_id=50000 + v // 10, item_num=t, current_item_num=stock[v]))
+            request.append(PcrApi.room__multi_give_gift__item_info(item_id=50000 + v // 10, item_num=t, current_item_num=stock[v]))
             stock[v] -= t
         try:
-            await pcrClient.MultiGiveGift(PcrApi.MultiGiveGiftRequest(unit_id=id * 100 + 1, item_info=request))
+            await pcrClient.room__multi_give_gift_async(PcrApi.room__multi_give_gift_request(unit_id=id * 100 + 1, item_info=request))
         except PcrApiException as e:
-            outputs.append(OutputFlag.Error, f"提升角色{PcrApi.CharaOutputName(id)}好感失败：{e.__cause__}")
+            outputs.append(OutputFlag.Error, f"提升角色{PcrApi.u_get_chara_friendly_output(id)}好感失败：{e.__cause__}")
             break
         else:
-            succeeded.append(PcrApi.CharaOutputName(id))
+            succeeded.append(PcrApi.u_get_chara_friendly_output(id))
     if succeeded:
         outputs.append(OutputFlag.Succeed, f"以下角色提升好感成功：{' '.join(succeeded)}")
     if skipped:
@@ -2285,7 +2298,7 @@ async def give_gift(pcrClient: PcrApi) -> Outputs:
     
 async def read_chara_story(pcrClient: PcrApi) -> Outputs:
     try:
-        load_index = await pcrClient.GetLoadIndexRaw()
+        load_index = await pcrClient.load__index_async()
         read_story_ids = load_index["read_story_ids"]
     except PcrApiException as e:
         return f'Fail. 获取剧情阅读信息失败：{e}'
@@ -2298,7 +2311,7 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
     outputs = Outputs()
     succeeded: List[str] = []
     try:
-        chara_loveinfo = await pcrClient.GetCharaLoveInfoDict()
+        chara_loveinfo = await pcrClient.u_get_user_chara_info_dict_async()
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取各角色好感信息失败：{e}')
     
@@ -2306,7 +2319,7 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
     for id4, love_info in chara_loveinfo.items():
         already_read_id = id42read.get(id4, 0)
         love_level = love_info.love_level
-        chara_name = PcrApi.CharaOutputName(id4)
+        chara_name = PcrApi.u_get_chara_friendly_output(id4)
         
         full_story = True
         if '(' in chara.fromid(id4).name: # 非原皮角色剧情不满
@@ -2320,26 +2333,36 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
         if full_story:
             max_read_id = love_level
         else:
-            if love_level < 4:
+            if love_level <= 3: # 1 2 3
                 max_read_id = 1
-            elif love_level == 4:
+            elif love_level == 4: # 4
                 max_read_id = 2
-            elif love_level < 8:
+            elif love_level <= 7: # 5 6 7
                 max_read_id = 3
-            else:
+            else: # 8 9 10 11 12
                 max_read_id = love_level - 4
+            
+            if id4 in [1287, 1288]: # 星幽猫拳，星幽剑圣 # 不确定是否是所有新角色都这样，再看看
+                if love_level <= 4: # 1 2 3 4
+                    max_read_id = 1
+                elif love_level == 5: # 5
+                    max_read_id = 2
+                elif love_level <= 7: # 6 7
+                    max_read_id = 3
+                else: # 8 9 10 11 12
+                    max_read_id = love_level - 4
             
         # if id4 == 1164: # 优妮(圣学祭) 只出了一话 # 现在出全了
         #     max_read_id = 1
-        if id4 == 1255: # 姬塔(术士) 看了升hp对不上轴
-            max_read_id = 1
+        # if id4 == 1255: # 姬塔(术士) 看了升hp对不上轴 # 20251008 更新：不用卡了
+        #     max_read_id = 1
 
         if max_read_id <= already_read_id:
             continue
         for read_id in range(already_read_id + 1, max_read_id + 1):
             story_id = id4 * 1000 + read_id
             try:
-                await pcrClient.ReadStory(story_id)
+                await pcrClient.u_read_chara_story_async(story_id)
             except Exception as e:
                 outputs.append(OutputFlag.Error, f'阅读角色{chara_name}剧情{story_id}失败。若此角色为活动角色，请先阅读活动剧情。')
                 break
@@ -2352,6 +2375,46 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Skip, "没有未读的角色好感剧情")
     return outputs    
 
+async def read_birthday_story_async(pcrClient: PcrApi) -> Outputs:
+    cache_max_birthday_story_id = gs_fileIo.get_latest_birthday_story_id()
+    try:
+        read_story_ids = await pcrClient.load__index__read_story_ids_async()
+        read_birthday_story_ids = [id for id in read_story_ids if 4010000 < id < 4011000]
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取剧情阅读信息失败：{e}')
+    user_max_birthday_story_id = max(read_birthday_story_ids or [4010000])
+    if user_max_birthday_story_id > cache_max_birthday_story_id:
+        cache_max_birthday_story_id = user_max_birthday_story_id
+        gs_fileIo.set_latest_birthday_story_id(cache_max_birthday_story_id)
+
+    unread_story_ids = set([i for i in range(4010000 + 1, cache_max_birthday_story_id + 1)]) - set(read_birthday_story_ids)
+    if not unread_story_ids:
+        return Outputs.FromStr(OutputFlag.Skip, f'没有未读的生日剧情')
+    
+    unread_story_ids = list(sorted(unread_story_ids))
+    unread_story_cnt = len(unread_story_ids)
+    
+    outputs = Outputs()
+    outputs.append(OutputFlag.Info, f'检测到{unread_story_cnt}个未读的生日剧情。')
+    
+    succeed_cnt = 0
+    for story_id in unread_story_ids:
+        try:
+            await pcrClient.story__check_async(story_id)
+        except Exception as e:
+            outputs.append(OutputFlag.Error, f'开始阅读第{succeed_cnt + 1}/{unread_story_cnt}话生日剧情({story_id})失败：{e}')
+            break
+        try:
+            await pcrClient.story__start_async({"story_id": story_id, "skip_info": {"skip_type": 1, "scroll_coordinate": ""}}) # 从剧情入口阅读过往生日剧情时，无论是否真的跳过，type都是1
+        except Exception as e:
+            outputs.append(OutputFlag.Error, f'领取第{succeed_cnt + 1}/{unread_story_cnt}话生日剧情({story_id})奖励失败：{e}')
+            break
+        succeed_cnt += 1
+            
+    if succeed_cnt > 0:
+        outputs.append(OutputFlag.Succeed, f'成功阅读{succeed_cnt}个生日剧情')
+    return outputs
+    
 
 async def read_main_story(account_info):
     try:
@@ -2532,7 +2595,7 @@ async def eat_pudding(pcrClient: PcrApi) -> Outputs:
     pudding_event_id = 10080
     
     try:
-        events = await pcrClient.GetEvents()
+        events = await pcrClient.load__index__event_statuses_async()
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取当前活动列表失败：{e}')
     
@@ -2545,7 +2608,7 @@ async def eat_pudding(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Skip, "吃布丁活动已结束")
     
     try:
-        event_info = await pcrClient.GetEventInfo(pudding_event_id)
+        event_info = await pcrClient.event__hatsune__top_async(pudding_event_id)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取活动{pudding_event_id}信息失败：{e}')
     
@@ -2561,7 +2624,7 @@ async def eat_pudding(pcrClient: PcrApi) -> Outputs:
         return Outputs.FromStr(OutputFlag.Abort, f'活动{pudding_event_id}的普通Boss尚未解锁，无法开启吃布丁小游戏')
     
     try:
-        pudding_info = await pcrClient.GetEatPuddingGameInfo()
+        pudding_info = await pcrClient.psy__top_async()
         material_item_id = pudding_info.psy_setting["material_item_id"]
         get_pudding_frame_id_list = [x.frame_id for x in pudding_info.cooking_status] 
     except PcrApiException as e:
@@ -2570,12 +2633,12 @@ async def eat_pudding(pcrClient: PcrApi) -> Outputs:
     for drama in pudding_info.drama_list:
         if not drama.read_status:
             try:
-                await pcrClient.EatPuddingGameReadDrama(drama.drama_id)
+                await pcrClient.psy__read_drama_async(drama.drama_id)
             except PcrApiException as e:
                 return Outputs.FromStr(OutputFlag.Error, f'阅读吃布丁小游戏剧情[{drama.drama_id}]失败：{e}')
     
     try:
-        stock = await pcrClient.GetItemStock(material_item_id)
+        stock = await pcrClient.u_get_item_stock_async(material_item_id)
     except PcrApiException as e:
         return Outputs.FromStr(OutputFlag.Error, f'获取布丁材料库存信息失败：{e}')
     if stock <= 0:
@@ -2587,7 +2650,7 @@ async def eat_pudding(pcrClient: PcrApi) -> Outputs:
         use_pudding_num = min(stock, 24)
         start_cooking_frame_id_list = [x for x in range(1, use_pudding_num + 1)]
         try:
-            await pcrClient.EatPuddingGameStartCook(start_cooking_frame_id_list, get_pudding_frame_id_list)
+            await pcrClient.psy__start_cooking_async(start_cooking_frame_id_list, get_pudding_frame_id_list)
         except PcrApiException as e:
             outputs.append(OutputFlag.Error, f'制作布丁失败：{e}')
             break
@@ -2608,8 +2671,6 @@ async def __star6_sweep(account_info, map_id, sweep_cnt, item_id, buy_stamina_pa
     chara_id = int(f'1{str(item_id)[-3:]}')
     chara_name = chara.fromid(chara_id).name
 
-    global stamina_short
-
     outp = []
     try:
         ret = await query.sweep(account_info, map_id, sweep_cnt, buy_stamina_passive_max)
@@ -2618,7 +2679,6 @@ async def __star6_sweep(account_info, map_id, sweep_cnt, item_id, buy_stamina_pa
         raise Exception(" ".join(outp))
     else:
         outp.append(ret)
-        stamina_short = account_info.get("stamina_short", False)
 
     try:
         chara_pure_frag_stock = await query.get_item_stock(account_info, item_id)
@@ -2650,13 +2710,12 @@ async def _star6_sweep(account_info, allow_recovery: bool, buy_stamina_passive_m
     except Exception as e:
         return f'Fail. 获取装备信息失败：{e}'
 
-    global stamina_short
     outp = []
     已刷满但未开花角色: List[str] = []
     已开放但未3星通关地图: List[str] = []
     今日已完成扫荡地图: List[str] = []
     for map_id, item_id in star6_utils.get_map_2_item_dict().items():  # 13018001: 32058
-        if stamina_short:
+        if account_info.get("is_out_of_stamina", None) == True:
             break
 
         if map_id not in all_quest:
@@ -2764,9 +2823,8 @@ async def star6_sweep(account_info, sweep_cnt, buy_stamina_passive_max):
 
 
 async def _event_sweep(account_info, quest_id, x_remain, buy_stamina_passive_max):
-    global stamina_short
-    if stamina_short:
-        return ""
+    if account_info.get("is_out_of_stamina", None) == True:
+        return "Skip. *体力已耗尽*"
     try:
         ticket = await query.get_ticket_num(account_info)
     except Exception as e:
@@ -2804,7 +2862,7 @@ async def _event_sweep(account_info, quest_id, x_remain, buy_stamina_passive_max
                                              stamina_take * x_remain, stamina)
         s.append(f'尝试购买体力({stamina_old}->{stamina_take * x_remain})：{message}')
         if stamina < stamina_take * x_remain:
-            stamina_short = True
+            account_info["is_out_of_stamina"] = True
     y = min(ticket, x_remain, stamina // stamina_take)
     if y == ticket:
         s.append(f'Warn. 扫荡券仅剩{ticket}张')
@@ -2823,7 +2881,7 @@ async def _event_sweep(account_info, quest_id, x_remain, buy_stamina_passive_max
             s.append(f'Fail. 扫荡{quest_id}失败：{e}')
         else:
             s.append(f'Succeed. 扫荡{quest_id}成功({y}次)')
-    if stamina_short:
+    if account_info.get("is_out_of_stamina", None) == True:
         s.append('体力耗尽，不执行后续刷图')
     return '\n'.join(s)
 
@@ -3035,9 +3093,8 @@ async def event_normal_sweep(account_info, sweep_type: str, buy_stamina_passive_
     sweep_type: enum("old", "new")
     map_id_int: enum(1, 15)
     '''
-    global stamina_short
-    if stamina_short:
-        return ""
+    if account_info.get("is_out_of_stamina", None) == True:
+        return "Skip. *体力已耗尽*"
 
     try:
         event_id_list, _ = await get_event_id_list(account_info, sweep_type)
@@ -3070,9 +3127,8 @@ async def event_hard_sweep(account_info, sweep_type: str, buy_stamina_passive_ma
     '''
     sweep_type: enum("old", "new", "all")
     '''
-    global stamina_short
-    if stamina_short:
-        return ""
+    if account_info.get("is_out_of_stamina", None) == True:
+        return "Skip. *体力已耗尽*"
 
     try:
         event_id_list, msg = await get_event_id_list(account_info, sweep_type)
@@ -3101,17 +3157,209 @@ async def event_hard_sweep(account_info, sweep_type: str, buy_stamina_passive_ma
                         msg.append(f'Skip. H1-{i}已扫荡')
                         break
                     msg.append(await _event_sweep(account_info, quest_id, 3 - quest["daily_clear_count"], buy_stamina_passive_max))
-                    if stamina_short:
+                    if account_info.get("is_out_of_stamina", None) == True:
                         break
-            if stamina_short:
+            if account_info.get("is_out_of_stamina", None) == True:
                 break
             if f == False:
                 msg.append(f'Abort. H1-{i} Unlock')
                 break
-        if stamina_short:
+        if account_info.get("is_out_of_stamina", None) == True:
             break
     return ' '.join(msg)
 
+
+async def recover_stamina_to_target_async(pcrClient: PcrApi, user_allow_recover_count: int, target_stamina: int, account_info: dict, present_receive_mode: str, is_daily_mission_accept_all: bool) -> tuple[Outputs, int]:
+    """
+    Raises:
+        PcrApiException
+        AssertionError
+    Returns:
+        tuple(Outputs, int): 
+            Outputs=操作日志
+            int=操作后体力。仅当Outputs.__bool__为真时有效
+    """
+    outputs = Outputs()
+    outputs.append(OutputFlag.Info, f'尝试回复体力至{target_stamina}')
+    if present_receive_mode in ["dated", "all"]:
+        _ = await present_accept(account_info, present_receive_mode)
+        outputs.append(OutputFlag.Info, f'已领取礼物箱(mode={present_receive_mode})')
+    if is_daily_mission_accept_all:
+        _ = await mission_accept_all(account_info)
+        outputs.append(OutputFlag.Info, f'已领取每日任务')
+    recovery_outputs, current_stamina = await pcrClient.u_recover_stamina_to_target_async(user_allow_recover_count, target_stamina)
+    return outputs + recovery_outputs, current_stamina
+    
+
+async def talent_sweep_async(pcrClient: PcrApi, sweep_mode: str, sweep_cnt: int, user_allow_stamina_recover_count: int, account_info: dict, present_receive_mode: str, is_daily_mission_accept_all: bool) -> Outputs:
+    if sweep_mode == "disabled":
+        return Outputs.FromStr(OutputFlag.Error, "AssertionError: talent_sweep_async is disabled")
+    if sweep_mode not in ["passed", "max"]:
+        return Outputs.FromStr(OutputFlag.Error, f'AssertionError: Unknown sweep_mode: {sweep_mode}')
+    if sweep_cnt <= 0:
+        return Outputs.FromStr(OutputFlag.Error, f'AssertionError: sweep_cnt must be positive integer, got {sweep_cnt}')
+
+    try:
+        talent_quest = await pcrClient.get_load__index__ini_setting__talent_quest_async()
+        daily_clear_limit_count: int = talent_quest.daily_clear_limit_count # 10
+        recovery_max_count: int = talent_quest.recovery_max_count # 1
+        recovery_cost: int = talent_quest.recovery_cost # 50
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取深域通用信息失败：{e}')
+
+    try:
+        cleared_talent_quest_id_list = await pcrClient.home__index__cleared_talent_quest_id_list_async()
+        talent_quest_area_info = await pcrClient.home__index__talent_quest_area_info_async()
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取深域用户信息失败：{e}')
+
+    outputs = Outputs()
+    talent_progress_outputs: list[str] = []
+
+    talent_quest_type2user_cleared_id: dict[int, int] = {}
+    talent_quest_type2max_cleared_id: dict[int, int] = gs_fileIo.get_talent_quest_type2max_cleared_id()
+    is_max_cleared_id_updated = False
+    因未解锁而不扫荡的属性: list[map_utils.TalentPCRMap.TalentPCRMapSubType] = []
+    因设置而不扫荡的属性: list[map_utils.TalentPCRMap.TalentPCRMapSubType] = []
+    for subtype in map_utils.TalentPCRMap.TalentPCRMapSubType:
+        user_cleared_id = max([x.id for x in cleared_talent_quest_id_list if x.subtype == subtype] or [0])
+        talent_quest_type2user_cleared_id[subtype.value] = user_cleared_id
+        max_cleared_id = talent_quest_type2max_cleared_id.get(subtype.value, 0)
+        if user_cleared_id > max_cleared_id:
+            talent_quest_type2max_cleared_id[subtype.value] = user_cleared_id
+            is_max_cleared_id_updated = True
+        
+        if user_cleared_id == 0:
+            talent_progress_output = f'{subtype.name}<未解锁>'
+            因未解锁而不扫荡的属性.append(subtype)
+        else:
+            talent_progress_output = map_utils.from_id(user_cleared_id).name
+        if user_cleared_id < max_cleared_id:
+            max_cleared_quest = map_utils.from_id(max_cleared_id)
+            talent_progress_output += f'(max={max_cleared_quest.major}-{max_cleared_quest.minor})'
+            if sweep_mode == "max":
+                因设置而不扫荡的属性.append(subtype)
+        talent_progress_outputs.append(talent_progress_output)
+    
+    if is_max_cleared_id_updated:
+        gs_fileIo.set_talent_quest_type2max_cleared_id(talent_quest_type2max_cleared_id)
+
+    outputs.append(OutputFlag.Info, "深域进度：" + ' '.join(talent_progress_outputs))
+    if 因未解锁而不扫荡的属性:
+        outputs.append(OutputFlag.Warn, "以下属性未解锁，跳过扫荡：" + ' '.join([x.name for x in 因未解锁而不扫荡的属性]))
+    if 因设置而不扫荡的属性:
+        outputs.append(OutputFlag.Warn, "您设置仅尝试扫荡当前已推到最大进度的属性，以下属性将跳过扫荡：" + ' '.join([x.name for x in 因设置而不扫荡的属性]))
+
+    outputs.append(OutputFlag.Debug, "%SEP%")
+    扫荡的属性 = [subtype for subtype in map_utils.TalentPCRMap.TalentPCRMapSubType if subtype not in 因未解锁而不扫荡的属性 and subtype not in 因设置而不扫荡的属性]
+    
+    if sweep_cnt > daily_clear_limit_count * (1 + recovery_max_count):
+        outputs.append(OutputFlag.Warn, f'您设置的扫荡次数({sweep_cnt})过多，单属性每日上限为{daily_clear_limit_count}次，最多可回复{recovery_max_count}次，实际扫荡次数将被限制为{daily_clear_limit_count * (1 + recovery_max_count)}次')
+        sweep_cnt = daily_clear_limit_count * (1 + recovery_max_count)
+    # outputs.append(OutputFlag.Info, f'计划扫荡{sweep_cnt}次')
+    
+    class TalentQuestAreaInfoInternal:
+        def __init__(self, daily_clear_count: int, daily_recovery_count: int) -> None:
+            self.daily_clear_count = daily_clear_count
+            self.daily_recovery_count = daily_recovery_count
+    
+    talent_quest_area_id2info: dict[map_utils.TalentPCRMap.TalentPCRMapSubType, TalentQuestAreaInfoInternal] = {
+        map_utils.TalentPCRMap.TalentPCRMapSubType(int(f'8{info.talent_id}001000')): TalentQuestAreaInfoInternal(info.daily_clear_count, info.daily_recovery_count) for info in talent_quest_area_info
+    }
+    
+    is_all_cleared = True
+    talent_clear_count_outputs: list[str] = []
+    for subtype in 扫荡的属性:
+        if subtype not in talent_quest_area_id2info:
+            talent_quest_area_id2info[subtype] = TalentQuestAreaInfoInternal(0, 0)
+        daily_clear_count = talent_quest_area_id2info[subtype].daily_clear_count
+        if daily_clear_count < sweep_cnt:
+            is_all_cleared = False
+        talent_clear_count_outputs.append(f'{subtype.name}={daily_clear_count}')
+    outputs.append(OutputFlag.Info, "今日已扫荡次数：" + " ".join(talent_clear_count_outputs))
+    
+    if is_all_cleared:
+        outputs.append(OutputFlag.Skip, "今日已完成深域扫荡")
+        return outputs
+    
+
+    has_output_stamina_once = False
+    is_recover_stamina_of_no_use = False
+    for i in range((sweep_cnt - 1) // daily_clear_limit_count + 1):
+        target_clear_count = min((i + 1) * 10, sweep_cnt)
+        outputs.append(OutputFlag.Debug, f'尝试将各属性扫荡至{target_clear_count}次')
+        
+        for subtype in 扫荡的属性:
+            already_clear_count = talent_quest_area_id2info[subtype].daily_clear_count
+            if already_clear_count >= target_clear_count:
+                continue
+            if already_clear_count < i * 10: # 因种种原因未扫满上次的10次（钻石不足，体力不足，扫荡券不足等）
+                continue
+            
+            this_turn_clear_count = target_clear_count - already_clear_count
+            this_turn_stamina_need = this_turn_clear_count * map_utils.TalentPCRMap.talent_stamina_cost
+            try:
+                current_stamina = await pcrClient.u_get_current_stamina_async()
+            except Exception as e:
+                outputs.append(OutputFlag.Error, f'获取当前体力失败：{e}')
+                return outputs
+            outputs.append(OutputFlag.Debug if has_output_stamina_once else OutputFlag.Info, f'当前体力{current_stamina}')
+            has_output_stamina_once = True
+            
+            if current_stamina < this_turn_stamina_need:
+                if not is_recover_stamina_of_no_use:
+                    try:
+                        recover_stamina_output, current_stamina_new = await recover_stamina_to_target_async(pcrClient, user_allow_stamina_recover_count, this_turn_stamina_need, account_info, present_receive_mode, is_daily_mission_accept_all)
+                    except Exception as e:
+                        outputs.append(OutputFlag.Error, f'恢复体力失败：{e}')
+                        return outputs
+                    outputs += recover_stamina_output
+                    if current_stamina == current_stamina_new:
+                        is_recover_stamina_of_no_use = True
+                    current_stamina = current_stamina_new
+            if current_stamina < map_utils.TalentPCRMap.talent_stamina_cost:
+                account_info["is_out_of_stamina"] = True
+                outputs.append(OutputFlag.Info, '体力耗尽，不执行后续扫荡')
+                return outputs
+            this_turn_clear_count = min(this_turn_clear_count, current_stamina // map_utils.TalentPCRMap.talent_stamina_cost)
+            
+            try:
+                ticket_stock = await pcrClient.u_get_ticket_stock_async()
+            except Exception as e:
+                outputs.append(OutputFlag.Error, f'获取当前扫荡券数量失败：{e}')
+                return outputs
+            if ticket_stock < this_turn_clear_count:
+                outputs.append(OutputFlag.Warn, f'扫荡券数量{ticket_stock}不足')
+                this_turn_clear_count = ticket_stock
+            
+            if already_clear_count + this_turn_clear_count > (1 + talent_quest_area_id2info[subtype].daily_recovery_count) * daily_clear_limit_count:
+                try:
+                    jewel = await pcrClient.u_get_total_jewel_async()
+                except Exception as e:
+                    outputs.append(OutputFlag.Error, f'获取当前钻石失败：{e}')
+                    return outputs
+                if jewel < recovery_cost:
+                    outputs.append(OutputFlag.Warn, f'当前钻石{jewel}不足以回复挑战次数({recovery_cost})。钻石耗尽不执行后续扫荡')
+                    return outputs    
+                try:
+                    await pcrClient.talent_quest__recover_challenge_async(subtype.value // 1000000 % 10, jewel)
+                except Exception as e:
+                    outputs.append(OutputFlag.Error, f'[{subtype.name}]属性深域回复挑战次数失败：{e}')
+                    return outputs
+                talent_quest_area_id2info[subtype].daily_recovery_count += 1
+            
+            try:
+                await pcrClient.talent_quest__quest_skip_async(talent_quest_type2user_cleared_id[subtype.value], this_turn_clear_count, ticket_stock)
+            except Exception as e:
+                outputs.append(OutputFlag.Error, f'[{subtype.name}]属性深域扫荡({this_turn_clear_count}次)失败：{e}')
+                return outputs
+            talent_quest_area_id2info[subtype].daily_clear_count += this_turn_clear_count
+            outputs.append(OutputFlag.Succeed, f'[{subtype.name}]扫荡{this_turn_clear_count}次')
+        
+        if account_info.get("is_out_of_stamina", None) == True:
+            break
+
+    return outputs
 
 async def buy_stamina_active(account_info, buy_stamina_active_daycount):
     try:
@@ -3160,8 +3408,7 @@ async def buy_stamina_active(account_info, buy_stamina_active_daycount):
             f'Skip. 设置每日购买{buy_stamina_active_daycount}管，今日已购{buy_stamina_already}管'
         )
     if stamina_now > stamina_old:
-        global stamina_short
-        stamina_short = False
+        account_info["is_out_of_stamina"] = False
     return '\n'.join(msg)
 
 
@@ -3204,7 +3451,6 @@ async def buy_stamina(account_info,
 
 
 async def investigate(account_info, qid: int, max_sweep_cnt: int, buy_stamina_passive_max):
-    global stamina_short
     outp = []
 
     try:
@@ -3229,8 +3475,7 @@ async def investigate(account_info, qid: int, max_sweep_cnt: int, buy_stamina_pa
                 outp.append(str(e))
                 break
             else:
-                stamina_short = account_info.get("stamina_short", False)
-                if stamina_short:
+                if account_info.get("is_out_of_stamina", None) == True:
                     outp.append('体力耗尽，不执行后续刷图。')
                     break
 
@@ -3844,40 +4089,49 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     if config["jjc_reward"]:
         progress.append(["jjc_reward", f'{await accept_jjc_reward(account_info)}'])
         progress.append(["jjc_reward", f'{await accept_pjjc_reward(account_info)}'])
-    global stamina_short
-    stamina_short = False
-    if config["6x_sweep"] and not stamina_short:
+    if config["6x_sweep"]:
         progress.append(["6x_sweep", f'{await star6_sweep(account_info, config["6x_sweep"], config["buy_stamina_passive"])}'])
-    if config["event_hard_135"] != "disabled" and not stamina_short:
+    if config["event_hard_135"] != "disabled":
         ret = await event_hard_sweep(account_info, config["event_hard_135"], config["buy_stamina_passive"], [1, 3, 5])
         if '当前无开放的活动' in ret:
             config = close_event_config(qqid)
         progress.append(["event_hard_135", f'{ret}'])
-    if config["event_hard_24"] != "disabled" and not stamina_short:
+    if config["event_hard_24"] != "disabled":
         ret = await event_hard_sweep(account_info, config["event_hard_24"], config["buy_stamina_passive"], [2, 4])
         if '当前无开放的活动' in ret:
             config = close_event_config(qqid)
         progress.append(["event_hard_24", f'{ret}'])
+
+    if config["talent_sweep_config"] != "disabled" and config["talent_sweep_cnt"] > 0:
+        talent_outputs = await talent_sweep_async(
+            pcrClient,
+            sweep_mode=config["talent_sweep_config"],
+            sweep_cnt=config["talent_sweep_cnt"],
+            user_allow_stamina_recover_count=max(config["buy_stamina_passive"], config["buy_stamina_active"]),
+            account_info=account_info,
+            present_receive_mode=config["present_receive"],
+            is_daily_mission_accept_all=config["mission_accept_all"])
+        
+        sep_index = next((i for i, output in enumerate(talent_outputs.outputs) if output.content == "%SEP%"), -1)
+        talent_outputs_2 = "-"
+        if sep_index != -1:
+            talent_outputs_1 = str(Outputs(talent_outputs.outputs[:sep_index]))
+            if len(talent_outputs.outputs) > sep_index + 1:
+                talent_outputs_2 = str(Outputs(talent_outputs.outputs[sep_index + 1:]))
+        else:
+            talent_outputs_1 = str(talent_outputs)
+            
+        progress.append(["talent_sweep_config", talent_outputs_1])
+        progress.append(["talent_sweep_cnt", talent_outputs_2])
+
     if config["xinsui_all"]:
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001007, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001006, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001005, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001004, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001003, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001002, config["xinsui_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xinsui_all", f'{await investigate(account_info, 18001001, config["xinsui_all"], config["buy_stamina_passive"])}'])
+        for xinsui_map_id in range(18001008, 18001000, -1):
+            if account_info.get("is_out_of_stamina", None) == False:
+                progress.append(["xinsui_all", f'{await investigate(account_info, xinsui_map_id, config["xinsui_all"], config["buy_stamina_passive"])}'])
     if config["xingqiubei_all"]:
-        if not stamina_short:
-            progress.append(["xingqiubei_all", f'{await investigate(account_info, 19001002, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
-        if not stamina_short:
-            progress.append(["xingqiubei_all", f'{await investigate(account_info, 19001001, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
+        for xingqiubei_map_id in range(19001002, 19001000, -1):
+            if account_info.get("is_out_of_stamina", None) == False:
+                progress.append(["xingqiubei_all", f'{await investigate(account_info, xingqiubei_map_id, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
     
     # allin
     for i in range(10):
@@ -3988,6 +4242,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     if config["read_event_story"]:
         progress.append(["read_event_story", f'{await read_event_story(account_info)}'])
         progress.append(["read_event_story", f'{await read_past_story(account_info)}'])
+        progress.append(["阅读生日剧情", f'{await read_birthday_story_async(pcrClient)}'])
         dic = get_sec()
         dic[qqid]["daily_config"]["read_event_story"] = False
         save_sec(dic)
@@ -4018,7 +4273,8 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
 
         def GetRM(msg: str) -> Tuple[str, str]:
             msg = msg.strip()
-            match_list = ['Fail.', 'Abort.', 'Warn.', 'Succeed.', 'Skip.', 'Error:', 'Abort:', 'Warn:', 'Succeed:', 'Skip:']
+            match_list = ['Fail.', 'Error.', 'Abort.', 'Warn.', 'Succeed.', 'Skip.', 'Info.',
+                          'Fail:', 'Error:', 'Abort:', 'Warn:', 'Succeed:', 'Skip:', 'Info:']
             result = [item for item in match_list if item in msg]
             if len(result) == 0:
                 return "", msg
@@ -4031,7 +4287,7 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
             outp_pd["key"].append(key)
             outp_pd["value"].append(value)
             outp_pd["result"].append(result)
-            outp_pd["message"].append(message)
+            outp_pd["message"].append(message.replace("\n", " "))
 
         # if int(qqid) == 981082801:
         #     print(outp)
@@ -4039,16 +4295,22 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
 
         async def outp_draw_img(outp_pd: pd.DataFrame):
             def draw_result(val):
-                if 'Skip' in val:
-                    return 'background-color: #0FBEC0; color: White'  # 天蓝
-                if 'Succeed' in val:
-                    return 'background-color: #A1B75D; color: White'  # 草绿
+                if 'Fail' in val or 'Error' in val:
+                    return 'background-color: #B45A3C; color: White; font-weight: bold'  # 砖红
                 if 'Abort' in val:
                     return 'background-color: #D0B777; color: White; font-weight: bold'  # 土黄
                 if 'Warn' in val:
                     return 'background-color: #B270A2; color: White; font-weight: bold'  # 浅紫
-                if 'Fail' in val or 'Error' in val:
-                    return 'background-color: #B45A3C; color: White; font-weight: bold'  # 砖红
+                if 'Succeed' in val:
+                    return 'background-color: #A1B75D; color: White'  # 草绿
+                if 'Skip' in val:
+                    return 'background-color: #0FBEC0; color: White'  # 天蓝
+                if 'Info' in val:
+                    return 'background-color: #DDDDDD; color: #666666'  # 灰
+                # 默认透明底黑色字
+                
+                
+                
 
             outp_pd_styled = outp_pd.style.applymap(draw_result, subset=['result'])
             outp_pd_styled = outp_pd_styled.set_properties(**{'text-align': 'left'})
@@ -4697,10 +4959,14 @@ def PraseUnitInfo(unit_info: dict) -> str:
     skill_level = "/".join([str(x["skill_level"]) for x in unit_info.get("main_skill", [])]) or "unknown"
     ex_level = "/".join([str(x["skill_level"]) for x in unit_info.get("ex_skill", [])]) or "unknown"
     equip_slot = "".join(["-" if x["is_slot"] == 0 else str(x["enhancement_level"]) for x in unit_info.get("equip_slot", [])])
-    unique_slot = "".join(["-" if x["is_slot"] == 0 else str(x["enhancement_level"]) for x in unit_info.get("unique_equip_slot", [])])
+    unique_equip_slot = unit_info.get("unique_equip_slot", [])
+    if unique_equip_slot:
+        unique_slot = "/".join(["0" if x["is_slot"] == 0 else str(x["enhancement_level"]) for x in unique_equip_slot]) + "专"
+    else:
+        unique_slot = "专武未实装"
     equip_num = len([1 for x in unit_info.get("equip_slot", []) if x["is_slot"] == 1])
     rank = f'R{unit_info["promotion_level"]}-{equip_num}({equip_slot})'
-    return f'角色当前状态：\n{battle_rarity}({unit_rarity})x {unit_level}级\n{rank} {unique_slot}专\nub={ub_level} 技能={skill_level} ex={ex_level}'
+    return f'角色当前状态：\n{battle_rarity}({unit_rarity})x {unit_level}级\n{rank} {unique_slot}\nub={ub_level} 技能={skill_level} ex={ex_level}'
     
 
 
@@ -4822,8 +5088,7 @@ async def change_support_unit(bot: HoshinoBot, ev: CQEvent):
     support_unit_id = chara.roster.get_id(support_unit)
     if support_unit_id == 1000:
         _, name, score = chara.guess_id(support_unit)
-        await bot.send(ev, f'无法识别"{support_unit}"' + (f'您说的有{score}%可能是{name}' if score > 70 else ""))
-        raise Exception(f'无法识别"{support_unit}"' + (f'您说的有{score}%可能是{name}' if score > 70 else ""))
+        await bot.send(ev, f'无法识别"{support_unit}"' + (f'您说的有{score}%可能是{name}'))
     return account_info, support_unit_id
 
 
@@ -4838,10 +5103,11 @@ async def change_dungeon_support_unit_private(bot, ev):
 @sv.on_prefix(("#上地下城支援", "#挂地下城支援"))
 async def change_dungeon_support_unit(bot, ev):
     account_info, support_unit_id = await change_support_unit(bot, ev)
-    await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 1))
+    if support_unit_id != 1000:
+        await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 1))
 
 
-@sv.on_prefix(("上公会支援", "挂公会支援", "上公会站支援", "挂公会站支援", "上会战支援", "挂会战支援", "上露娜支援", "挂露娜支援", "上露娜塔支援", "挂露娜塔支援"))
+@sv.on_prefix(("上公会支援", "挂公会支援", "上工会支援", "挂工会支援", "上会战支援", "挂会战支援", "上露娜支援", "挂露娜支援", "上露娜塔支援", "挂露娜塔支援"))
 async def change_clan_support_unit_private(bot, ev):
     if ev.group_id is None:
         await change_clan_support_unit(bot, ev)
@@ -4849,13 +5115,14 @@ async def change_clan_support_unit_private(bot, ev):
         await bot.send(ev, '在群聊模式下，请使用 #上公会支援 进行操作。')
 
 
-@sv.on_prefix(("#上公会支援", "#挂公会支援", "#上公会站支援", "#挂公会站支援", "#上会战支援", "#挂会战支援", "#上露娜支援", "#挂露娜支援", "#上露娜塔支援", "#挂露娜塔支援"))
+@sv.on_prefix(("#上公会支援", "#挂公会支援", "#上工会支援", "#挂工会支援", "#上会战支援", "#挂会战支援", "#上露娜支援", "#挂露娜支援", "#上露娜塔支援", "#挂露娜塔支援"))
 async def change_clan_support_unit(bot, ev):
     account_info, support_unit_id = await change_support_unit(bot, ev)
-    await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 2))
+    if support_unit_id != 1000:
+        await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 2))
 
 
-@sv.on_prefix(("上关卡支援", "挂关卡支援"))
+@sv.on_prefix(("上关卡支援", "挂关卡支援", "上活动支援", "挂活动支援", "上深域支援", "挂深域支援"))
 async def change_quest_support_unit_private(bot, ev):
     if ev.group_id is None:
         await change_quest_support_unit(bot, ev)
@@ -4863,10 +5130,11 @@ async def change_quest_support_unit_private(bot, ev):
         await bot.send(ev, '在群聊模式下，请使用 #上关卡支援 进行操作。')
 
 
-@sv.on_prefix(("#上关卡支援", "#挂关卡支援"))
+@sv.on_prefix(("#上关卡支援", "#挂关卡支援", "#上活动支援", "#挂活动支援", "#上深域支援", "#挂深域支援"))
 async def change_quest_support_unit(bot, ev):
     account_info, support_unit_id = await change_support_unit(bot, ev)
-    await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 3))
+    if support_unit_id != 1000:
+        await bot.send(ev, await _change_support_unit(account_info, support_unit_id, 3))
 
 
 @sv.scheduled_job('interval', hours=12)
@@ -4906,7 +5174,17 @@ async def axistest(*args):
 async def test_on_startup():
     dic = get_sec()
     account_info = dic["981082801"]
+    # account_info = {"account": "...", "password": "..."}
     pcrClient = PcrApi(account_info)
     await pcrClient.Login(always_call_login_and_check=True)
 
-    print(await travel_routine(pcrClient))
+    # print(await talent_sweep_async(
+    #     pcrClient,
+    #     sweep_mode="max",
+    #     sweep_cnt=21,
+    #     user_allow_stamina_recover_count=1,
+    #     account_info=account_info,
+    #     present_receive_mode="dated",
+    #     is_daily_mission_accept_all=True))
+    
+    print(await read_birthday_story_async(pcrClient))

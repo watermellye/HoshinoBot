@@ -1,10 +1,8 @@
 from json import load
-import asyncio
 from enum import IntEnum, unique
 from os.path import dirname, join, exists
 from traceback import print_exc
-from datetime import datetime
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 from ..autopcr_db.typing import *
 from .pcr_client import PcrClientManager, PcrClient
@@ -306,15 +304,15 @@ async def get_chara(account, chara_id: Union[int, str]):
     return box[chara_id]
 
 
-async def get_clan_id(account):
+async def get_clan_id(account) -> int:
     home_index = await get_home_index(account)
-    try:
-        clan_id = home_index["user_clan"]["clan_id"]
-        assert clan_id != 0, "该玩家未加入行会"
-        return clan_id
-    except Exception as e:
-        raise Exception("该玩家未加入行会")
+    clan_id = home_index["user_clan"]["clan_id"]
+    assert clan_id != 0, "该玩家未加入行会"
+    return clan_id
 
+async def get_clan_id_safe_async(account) -> int:
+    home_index = await get_home_index(account)
+    return home_index.get("user_clan", {}).get("clan_id", 0)
 
 async def get_clan_info(account, clanid: Union[int, None] = None):
     if clanid is None:

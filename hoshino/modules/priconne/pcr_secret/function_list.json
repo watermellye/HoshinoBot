@@ -225,7 +225,7 @@
     "free_gacha_special_event": {
         "brief": "免费十连",
         "cn": "抽取活动免费十连",
-        "description": "抽取免费十连。在没有免费十连的时期会自动关闭。优先级：夏日庆典>公主庆典>自选精选>精选>附奖>白金。其中，对于需要选择角色的池子，ebq 不会改变你的选择。如果你没有进行选择，ebq 会自动选定。",
+        "description": "抽取免费十连。在没有免费十连的时期会自动关闭。优先级：夏日庆典>公主庆典>自选精选>附奖自选精选>精选>附奖>白金。其中，对于需要选择角色的池子，ebq 不会改变你的选择。如果你没有进行选择，ebq 会自动选定。",
         "type": "bool",
         "candidate_value": [
             true,
@@ -396,7 +396,7 @@
     "dungeon_sweep": {
         "brief": "地下城扫荡",
         "cn": "扫荡地下城",
-        "description": "'passed'表示扫荡当前您已通关的最高等级的地下城；'max'表示仅尝试扫荡当前最高等级地下城(ex5)，若您尚未通关则不扫荡。",
+        "description": "'passed'表示扫荡当前您已通关的最高等级的地下城；'max'表示仅尝试扫荡当前最高等级地下城，若您尚未通关则不扫荡。",
         "type": "enum",
         "candidate_value": [
             "disabled",
@@ -509,6 +509,32 @@
         ],
         "implemented": true,
         "default": false
+    },
+    "talent_sweep_config": {
+        "brief": "扫荡深域模式",
+        "cn": "扫荡深域模式",
+        "description": "'passed'表示扫荡当前您各属性已通关的最高图；'max'表示仅尝试扫荡各属性ebq记录有人通关的最高图，若您尚未通关此图则不扫荡。",
+        "type": "enum",
+        "candidate_value": [
+            "disabled",
+            "passed",
+            "max"
+        ],
+        "implemented": true,
+        "default": "disabled"
+    },
+    "talent_sweep_cnt": {
+        "brief": "扫荡深域次数",
+        "cn": "扫荡深域次数",
+        "description": "注：如果扫荡深域设置为'disabled'，则本设置无效。",
+        "type": "enum",
+        "candidate_value": [
+            0,
+            10,
+            20
+        ],
+        "implemented": true,
+        "default": 0
     },
     "xinsui_all": {
         "brief": "刷心碎",

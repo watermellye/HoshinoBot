@@ -208,6 +208,8 @@ class PcrClient:
                 
                 # 维护版本
                 data_headers = response['data_headers']
+                
+                # 以下自动更新逻辑貌似坏了，等下次维护期间再确认下。
                 if "/check/game_start" == apiUrl and "store_url" in data_headers:
                     pattern = re.compile(r"\d{1,2}\.\d{1,2}\.\d{1,2}")
                     res = pattern.findall(data_headers["store_url"])
