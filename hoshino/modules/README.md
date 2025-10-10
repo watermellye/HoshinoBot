@@ -3,17 +3,30 @@
 
 其中，BCR登录模块使用了[冲冲](https://github.com/cc004)的[仓库](https://github.com/cc004/pcrjjc2/)中的部分代码。
 
+# 部署准备
+- Python 3.13 (Windows/Linux)
+- conda 或 uv
+
 # 部署方式
-`conda env create -f environment.yml`或`pip install -r requirements.txt`
+## uv
+```bash
+uv sync # 同步依赖
+uv run run.py # 执行项目
+```
+
+## conda
+`conda env create -f environment.yml`
 
 注意是`hoshino/modules`下的`environment.yml`或`requirements.txt`，根目录下的是HoshinoBot原版所需的。
 
+## 注意事项
 清日常模块建议额外安装`Firefox浏览器` **和** `Chrome浏览器`，否则将使用`matplotlib`模块绘制结果。
 （20250824更新：貌似不用装`Firefox浏览器`了，但是需要单独运行`geckodriver.exe`，放在`hoshino/modules/priconne/pcr_secret`下了）
 
 对于windows用户：
 - 建议使用 Windows 10 及以上，或Windows Server 2019及以上。如果遇到各种dll缺失问题，建议直接安装 Visual Studio 2019 及其C++桌面开发模块。
 - 建议在“本地组策略编辑器”中，在左侧栏内依次进入“计算机配置”-“管理模板”-“系统”-“文件系统”，在右侧栏中对“启用Win32长路径”设置项设置为“已启用”。
+- 如果使用 uv, pyproject.toml 中的`pywin32`, `wmi`这两个依赖可以去掉注释。
 
 # 装备农场模块
 装备农场涉及其中的`autopcr_db`, `farm`, `query`文件夹。
