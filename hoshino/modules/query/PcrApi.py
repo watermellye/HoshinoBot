@@ -336,7 +336,10 @@ class PcrApi:
         """
         return await self.CallApi("/profile/get_profile", {"target_viewer_id": target_viewer_id})
 
-
+    class profile__get_profile__quest_info__talent_quest_item(BaseModel):
+        talent_id: int = Field(description="1=火 2=水 3=风 4=光 5=暗")
+        clear_count: int = Field(description="最高通关关卡序号") # 30 = 3-10
+        
     class profile__get_profile__user_info(BaseModel):
         viewer_id: int
         user_name: str
@@ -357,9 +360,14 @@ class PcrApi:
         tower_cleared_floor_num: int
         tower_cleared_ex_quest_count: int
         friend_num: int
+        princess_knight_rank_total_exp: int = Field(description="公主骑士(深域)经验值", default=0)
 
     class profile__get_profile__quest_info(BaseModel):
-        normal_quest: Tuple[int, int, int] = Field(..., description="1/总数/最高难度")
+        normal_quest: Tuple[int, int, int] = Field(..., description="1/2/3星通关关卡数量")
+        hard_quest: Tuple[int, int, int] = Field(..., description="1/2/3星通关关卡数量")
+        very_hard_quest: Tuple[int, int, int] = Field(..., description="1/2/3星通关关卡数量")
+        byway_quest: int = Field(..., description="支线关卡通关数量")
+        talent_quest: List['PcrApi.profile__get_profile__quest_info__talent_quest_item']
         
     class profile__get_profile(BaseModel):
         user_info: 'PcrApi.profile__get_profile__user_info'
@@ -482,7 +490,7 @@ class PcrApi:
         members: List['PcrApi.clan__info__clan__members']
 
     class clan__info(BaseModel):
-        have_join_request: int
+        # have_join_request: int
         clan: 'PcrApi.clan__info__clan'
         clan_status: int
         current_period_ranking: int

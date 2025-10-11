@@ -32,14 +32,15 @@ from ...utils.output import *
 
 
 sv_help_all = '''
-[#pcr 账号 密码] 上传或更新自己的账号和密码
+[#pcr 账号 密码] 上传或更新自己的账号和密码（请加好友后私聊发送。加好友有一分钟延迟。）
 [清日常设置]
 [清日常]
 [#清日常@somebody]
-[#刷图推荐]
 [删除账号]
 
+[#刷图推荐]
 [#上[地下城|公会|关卡]支援@<somebody> 角色]
+[#公会深域查询]
 '''.strip()
 
 sv_help_group_manager = '''
@@ -5170,7 +5171,89 @@ async def axistest(*args):
 # @on_startup
 # async def test_on_startup_interface():
 #     asyncio.create_task(test_on_startup())
+
+class ClanUserTalentInfo:
+    subtype2emoji: dict[map_utils.TalentPCRMap.TalentPCRMapSubType, str] = {
+        map_utils.TalentPCRMap.TalentPCRMapSubType.火: "🔥",
+        map_utils.TalentPCRMap.TalentPCRMapSubType.水: "💧",
+        map_utils.TalentPCRMap.TalentPCRMapSubType.风: "🍃",
+        map_utils.TalentPCRMap.TalentPCRMapSubType.光: "☀️",
+        map_utils.TalentPCRMap.TalentPCRMapSubType.暗: "🌑"
+    }
     
+    def __init__(self, viewer_id: int, user_name: str, princess_knight_rank_total_exp: int, talent_type2clear_count: dict[map_utils.TalentPCRMap.TalentPCRMapSubType, int]):
+        self.viewer_id = viewer_id
+        self.user_name = user_name
+        self.princess_knight_rank_total_exp = princess_knight_rank_total_exp
+        self.talent_type2clear_count = talent_type2clear_count
+    
+    def get_talent_progress(self) -> str:
+        outputs: list[str] = []
+        for subtype in map_utils.TalentPCRMap.TalentPCRMapSubType:
+            output = ClanUserTalentInfo.subtype2emoji.get(subtype, subtype.name)
+            user_cleared_id = self.talent_type2clear_count.get(subtype, 0)
+            if user_cleared_id == 0:
+                output += "<未解锁>"
+            else:
+                talent_map = map_utils.from_id(subtype.value + user_cleared_id)
+                output += f'{talent_map.major}-{talent_map.minor}'
+            outputs.append(output)
+        return " ".join(outputs)
+    
+    def __repr__(self):
+        return f'exp={self.princess_knight_rank_total_exp} {self.get_talent_progress()} {self.user_name}({self.viewer_id}) '
+
+async def 公会深域查询_async(pcrClient: PcrApi) -> tuple[Outputs, list[ClanUserTalentInfo]]:
+    try:
+        clan_info = await pcrClient.clan__info_async()
+    except Exception as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取公会信息失败：{e}'), []
+    clan_name = clan_info.clan.detail.clan_name
+    
+    member_pcrid2name = {member.viewer_id: member.name for member in clan_info.clan.members}
+    clan_user_talent_info_list: list[ClanUserTalentInfo] = []
+    for pcrid, name in member_pcrid2name.items():
+        try:
+            profile = await pcrClient.profile__get_profile_async(pcrid)
+        except Exception as e:
+            return Outputs.FromStr(OutputFlag.Error, f'获取公会成员[{name}](pcrid)信息失败：{e}'), []
+        princess_knight_rank_total_exp = profile.user_info.princess_knight_rank_total_exp
+        talent_id2clear_count = {q.talent_id: q.clear_count for q in profile.quest_info.talent_quest}        
+        talent_type2clear_count = {map_utils.TalentPCRMap.TalentPCRMapSubType(int(f'8{talent_id}001000')): clear_count for talent_id, clear_count in talent_id2clear_count.items()}
+        clan_user_talent_info_list.append(ClanUserTalentInfo(pcrid, name, princess_knight_rank_total_exp, talent_type2clear_count))
+
+    clan_user_talent_info_list = list(sorted(clan_user_talent_info_list, key=lambda x: x.princess_knight_rank_total_exp, reverse=True))    
+
+    outputs: list[str] = [clan_name]
+    outputs.append(" | ".join(["公主骑士(深域)经验值", "深域进度", "成员名"]))
+    if len(clan_user_talent_info_list) >= 2:
+        outputs.append("(100%)")
+    for info in clan_user_talent_info_list:
+        outputs.append(" | ".join([str(info.princess_knight_rank_total_exp), info.get_talent_progress(), info.user_name or f'({info.viewer_id})']))
+    if len(clan_user_talent_info_list) >= 2:
+        outputs.append(f'({int(clan_user_talent_info_list[-1].princess_knight_rank_total_exp / clan_user_talent_info_list[0].princess_knight_rank_total_exp * 100)}%)')
+        outputs.append("*通过简介页面查询。经验值较低可能是因为没升属性等级或没点属性技能。")
+    return Outputs.FromStr(OutputFlag.Succeed, "\n".join(outputs)), clan_user_talent_info_list
+
+@sv.on_fullmatch(("#公会深域查询", "#工会深域查询", "#查询公会深域", "#查询工会深域"))
+async def 公会深域查询_interface(bot: HoshinoBot, ev: CQEvent):
+    dic = get_sec()
+    qqid = str(ev.user_id)
+    if qqid not in dic:
+        await bot.send(ev, "没有绑定账号，请发送【pcr帮助】")
+        return
+        
+    account_info = dic[qqid]
+    pcrClient = PcrApi(account_info)
+
+    await bot.send(ev, "开始查询。预计耗时约 30s。")
+    outputs, clan_user_talent_info_list = await 公会深域查询_async(pcrClient)
+    if outputs:
+        await bot.send(ev, f'{outputs}')
+        await bot.send(ev, f'(简版，供手机阅读)\n公主骑士(深域)经验值 | 成员名\n' + "\n".join([f'{info.princess_knight_rank_total_exp} | {info.user_name or f'({info.viewer_id})'}' for info in clan_user_talent_info_list]))
+    else:
+        await bot.send(ev, f'{outputs}')
+
 async def test_on_startup():
     dic = get_sec()
     account_info = dic["981082801"]
@@ -5187,4 +5270,4 @@ async def test_on_startup():
     #     present_receive_mode="dated",
     #     is_daily_mission_accept_all=True))
     
-    print(await read_birthday_story_async(pcrClient))
+    print(await 公会深域查询_async(pcrClient))
