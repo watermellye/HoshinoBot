@@ -1,21 +1,49 @@
 # 说明
-这里包含了[ellye](https://github.com/watermellye/)编写的AutoPCR（下称“本项目”）模块，实现了装备农场以及自动清日常的功能。
+这里包含了[ellye](https://github.com/watermellye/)编写的AutoPCR（下称“本项目”）模块，实现了自动清日常和其他功能。
 
 其中，BCR登录模块使用了[冲冲](https://github.com/cc004)的[仓库](https://github.com/cc004/pcrjjc2/)中的部分代码。
 
-# 部署方式
-`conda env create -f environment.yml`或`pip install -r requirements.txt`
+# 部署
+**以下命令均在 `hoshino` 目录下运行。**
 
-注意是`hoshino/modules`下的`environment.yml`或`requirements.txt`，根目录下的是HoshinoBot原版所需的。
+## 方式一：conda
+安装：`https://www.anaconda.com/download/success`。（推荐 miniconda）
 
-清日常模块建议额外安装`Firefox浏览器` **和** `Chrome浏览器`，否则将使用`matplotlib`模块绘制结果。
-（20250824更新：貌似不用装`Firefox浏览器`了，但是需要单独运行`geckodriver.exe`，放在`hoshino/modules/priconne/pcr_secret`下了）
+部署环境：`conda env create -f environment.yml`
 
+运行：
+```
+conda activate ebq
+python run.py
+```
+
+## 方式二：uv
+安装：`https://docs.astral.sh/uv/getting-started/installation/`。
+注：uv 是一个独立的工具。虽然也可以通过 pip 安装，但 uv 并不是一个 Python 模块。
+
+部署环境：
+```
+uv venv -p 3.13
+uv sync
+```
+`uv sync` 会自动读取 `pyproject.toml` 并安装依赖。
+
+运行：`uv run run.py`。
+uv 会自动从当前目录开始寻找 `.venv` 目录并激活对应环境。
+
+## 方式三：pip（不推荐）
+安装：假设你已经在系统全局安装了 python 3.13 且 pip 可用。
+
+部署环境：`pip install -r requirements.txt`
+
+运行：`python run.py`
+
+# 注意事项
 对于windows用户：
 - 建议使用 Windows 10 及以上，或Windows Server 2019及以上。如果遇到各种dll缺失问题，建议直接安装 Visual Studio 2019 及其C++桌面开发模块。
 - 建议在“本地组策略编辑器”中，在左侧栏内依次进入“计算机配置”-“管理模板”-“系统”-“文件系统”，在右侧栏中对“启用Win32长路径”设置项设置为“已启用”。
 
-# 装备农场模块
+# 装备农场模块（已不再维护）
 装备农场涉及其中的`autopcr_db`, `farm`, `query`文件夹。
 
 新版装备农场支持在一个插件中管理多个公会，仅支持免费模式。
@@ -32,6 +60,8 @@
 清日常模块于2022年初开始，最初功能为刷取心碎和星球杯的300体，以便早班刀手代刀。随后逐渐扩充出账号管理，box管理，以及完整的清日常功能。由于作者编程水平很菜，该模块中的`priconne/pcr_secert`, `priconne/myweb`, `autobox`部分代码未遵循任何python开发规范，且已堆成“屎山”，即使作者难以阅读、修改，将逐渐重构。
 
 ## 关于清日常结果图片渲染问题
+建议额外安装`Firefox浏览器` **和** `Chrome浏览器`，否则将使用`matplotlib`模块绘制结果。
+（20250824更新：貌似不用装`Firefox浏览器`了，但是需要单独运行`geckodriver.exe`，放在`hoshino/modules/priconne/pcr_secret`下了）
 
 ### 解决`matplotlib`模块的中文渲染问题
 当浏览器渲染失败时，会回退到使用`matplotlib`模块渲染。此时中文会无法显示。解决方法如下：
@@ -49,7 +79,8 @@ font.sans-serif: SimHei, DejaVu Sans, Bitstream Vera Sans, Computer Modern Sans 
 3. 如果你的操作系统没有黑体字体，请下载`simhei.ttf`，加入`...\Lib\site-packages\matplotlib\mpl-data\fonts\`下。
 4. 删除`%USERPROFILE%\.matplotlib\`文件夹，随后重启HoshinoBot。
 
-另，已知`dataframe_image`模块在某些实例上存在输出图片过度裁剪问题。基本不影响使用，若感兴趣可自行尝试进入源码debug并修复。（20250824 更新：目前似乎已无此问题。）
+另，已知`dataframe_image`模块在某些实例上存在输出图片过度裁剪问题。基本不影响使用，若感兴趣可自行尝试进入源码debug并修复。
+（20250824 更新：目前似乎已无此问题。）
 
 ## 重构计划
 新版AutoPCR已进入开发。部分新版AutoPCR的改进和新特性列举如下：
