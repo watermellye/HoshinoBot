@@ -209,17 +209,6 @@ class PcrClient:
                 # 维护版本
                 data_headers = response['data_headers']
                 
-                # 以下自动更新逻辑貌似坏了，等下次维护期间再确认下。
-                if "/check/game_start" == apiUrl and "store_url" in data_headers:
-                    pattern = re.compile(r"\d{1,2}\.\d{1,2}\.\d{1,2}")
-                    res = pattern.findall(data_headers["store_url"])
-                    if len(res):
-                        global g_nowVersion
-                        g_nowVersion = res[0]
-                        gs_defaultHeaders['APP-VER'] = g_nowVersion
-                        with open(gs_versionCachePath, "w", encoding='utf-8') as fp:
-                            print(g_nowVersion, file=fp)
-
                 # 维护对象数据
                 if data_headers.get('sid', '') != '':
                     t = md5()
@@ -322,6 +311,10 @@ class PcrClient:
             else:
                 raise
 
+        # 自动更新版本号的代码失效。
+        # 之前，在服务器维护时，调用 /check/game_start 会返回维护后的版本号。
+        # ver 10.7.1 之后，在调用 /tool/sdk_login 时即会抛出异常。
+        # 待下次版本更新时验证：1.能否从 get_maintenance_status 获取信息; 2.能否直接跳过 /tool/sdk_login，调用 /check/game_start。
         gamestart = await self.CallApi('/check/game_start', {'apptype': 0, 'campaign_data': '', 'campaign_user': randint(0, 99999)})
 
         if not gamestart['now_tutorial']:

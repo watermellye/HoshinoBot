@@ -1222,29 +1222,30 @@ async def sweep_explore(account_info, mode: str, friendly_name: str, api: str, q
         gs_fileIo.MaxExploreLevel = max_explore_level
     
     max_explore_id = quest_id_base + max_explore_level
-    if mode == "max":
-        if quest_dict.get(max_explore_id, {}).get("clear_flg", 0) != 3:
-            s.append(f'Warn. 您设置仅尝试扫荡当前开放的最高等级探索({max_explore_level})，但尚未通关。')
-            return '\n'.join(s)
-        
-    for i in range(max_explore_id, quest_id_base, -1):
-        if quest_dict.get(i, {}).get("clear_flg", 0) == 3:
-            try:
-                await query.query(
-                    account_info, "/training_quest/quest_skip", {
-                        "quest_id": i,
-                        "random_count": y,
-                        "current_ticket_num": ticket
-                    })
-            except Exception as e:
-                s.append(f'Fail. 进行{friendly_name}探索（{i%100}级，{y}次）失败：{e}')    
-            else:
-                s.append(f'Succeed. 成功进行{friendly_name}探索（{i%100}级，{y}次）')
-            return '\n'.join(s)
+    user_explore_id = next((i for i in range(max_explore_id, quest_id_base, -1) if quest_dict.get(i, {}).get("clear_flg", 0) == 3), quest_id_base)
     
-    s.append(f'Fail. 没有三星通关的{friendly_name}探索关卡')
-    return '\n'.join(s)
+    if user_explore_id == quest_id_base:
+        s.append(f'Fail. 您尚未三星通关任何{friendly_name}探索关卡，无法进行扫荡。')
+        return '\n'.join(s)
+    user_explore_level = user_explore_id - quest_id_base    
 
+    if mode == "max":
+        if user_explore_id < max_explore_id:
+            s.append(f'Warn. 您设置仅尝试扫荡当前开放的最高等级探索({max_explore_level})，但您目前最高通关的{friendly_name}探索等级为{user_explore_level}。')
+            return '\n'.join(s)
+
+    try:
+        await query.query(
+            account_info, "/training_quest/quest_skip", {
+                "quest_id": user_explore_id,
+                "random_count": y,
+                "current_ticket_num": ticket
+            })
+    except Exception as e:
+        s.append(f'Fail. 进行{friendly_name}探索（{user_explore_level}级，{y}次）失败：{e}')    
+    else:
+        s.append(f'Succeed. 成功进行{friendly_name}探索（{user_explore_level}级，{y}次）')
+    return '\n'.join(s)
 
 async def buy_exp(account_info):
     try:
@@ -1505,6 +1506,7 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         enter_area_id = data["enter_area_id"]
         rest_challenge_count = [x["count"] for x in data["rest_challenge_count"] if x["dungeon_type"] == 1][0]
         dungeon_cleared_area_id_list = data.get("dungeon_cleared_area_id_list", [])
+        dungeon_cleared_area_id_list = [x for x in dungeon_cleared_area_id_list if 31000 < x < 32000]
     except Exception as e:
         return f'Fail. 获取今日地下城状态失败：{e}'
 
@@ -1532,21 +1534,16 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
     # 在特别地下城期间把以下两行取消注释即可。后续更新。
     # if not allow_dungeon_sweep_during_sp:
     #     return f'Skip. 当前正在特别地下城活动举办期间，且您未设置在活动举办期间仍然保持扫荡地下城'
-    
-    if mode == "max":
-        max_dungeon_id = max(dungeon_id2name.keys())
-        if max_dungeon_id not in dungeon_cleared_area_id_list:
-            return f'Warn. 您设置仅尝试扫荡当前开放的最高等级地下城({dungeon_id2name[max_dungeon_id]})，但尚未通关。'
 
-    dungeon_area_id = max([x for x in dungeon_cleared_area_id_list if x in dungeon_id2name])
-    dungeon_area_name = dungeon_id2name.get(dungeon_area_id, dungeon_area_id)
-    # 不需要了
-    # try:
-    #     await query.query(account_info, "/dungeon/enter_area", {"dungeon_area_id": dungeon_area_id})
-    # except Exception as e:
-    #     return f'Fail. 尝试进入地下城 {dungeon_area_name} 失败：{e}'
+    max_dungeon_cleared_id: int = max(dungeon_cleared_area_id_list)
+    if mode == "max":
+        max_dungeon_id = max(dungeon_id2name.keys())        
+        if max_dungeon_cleared_id < max_dungeon_id:
+            return f'Warn. 您设置仅尝试扫荡当前开放的最高等级地下城({dungeon_id2name[max_dungeon_id]})，但您目前最高通关的地下城为{dungeon_id2name.get(max_dungeon_cleared_id, max_dungeon_cleared_id)}。'
+
+    dungeon_area_name = dungeon_id2name.get(max_dungeon_cleared_id, str(max_dungeon_cleared_id))
     try:
-        res = await query.query(account_info, "/dungeon/skip", {"dungeon_area_id": dungeon_area_id})
+        _ = await query.query(account_info, "/dungeon/skip", {"dungeon_area_id": max_dungeon_cleared_id})
     except Exception as e:
         return f'Fail. 尝试扫荡地下城 {dungeon_area_name} 失败：{e}'
     return f'Succeed. 扫荡地下城 {dungeon_area_name} 成功'
@@ -2343,20 +2340,21 @@ async def read_chara_story(pcrClient: PcrApi) -> Outputs:
             else: # 8 9 10 11 12
                 max_read_id = love_level - 4
             
-            if id4 in [1287, 1288]: # 星幽猫拳，星幽剑圣 # 不确定是否是所有新角色都这样，再看看
-                if love_level <= 4: # 1 2 3 4
-                    max_read_id = 1
-                elif love_level == 5: # 5
-                    max_read_id = 2
-                elif love_level <= 7: # 6 7
-                    max_read_id = 3
-                else: # 8 9 10 11 12
-                    max_read_id = love_level - 4
-            
         # if id4 == 1164: # 优妮(圣学祭) 只出了一话 # 现在出全了
         #     max_read_id = 1
         # if id4 == 1255: # 姬塔(术士) 看了升hp对不上轴 # 20251008 更新：不用卡了
         #     max_read_id = 1
+        if id4 in [1287, 1288]: # 星幽猫拳，星幽剑圣 # 不确定是否是所有新角色都这样，再看看。 # els 不是这样
+            if love_level <= 4: # 1 2 3 4
+                max_read_id = 1
+            elif love_level == 5: # 5
+                max_read_id = 2
+            elif love_level <= 7: # 6 7
+                max_read_id = 3
+            else: # 8 9 10 11 12
+                max_read_id = love_level - 4
+        if id4 in [1293, 1294]: # 水优妮，水华哥 # 截至 20251020，剧情一话都没出
+            max_read_id = 0
 
         if max_read_id <= already_read_id:
             continue
@@ -3283,12 +3281,13 @@ async def talent_sweep_async(pcrClient: PcrApi, sweep_mode: str, sweep_cnt: int,
         outputs.append(OutputFlag.Skip, "今日已完成深域扫荡")
         return outputs
     
-
+    outputs2 = Outputs()
     has_output_stamina_once = False
     is_recover_stamina_of_no_use = False
+    subtype2clear_count: dict[map_utils.TalentPCRMap.TalentPCRMapSubType, int] = {subtype: 0 for subtype in 扫荡的属性}
     for i in range((sweep_cnt - 1) // daily_clear_limit_count + 1):
         target_clear_count = min((i + 1) * 10, sweep_cnt)
-        outputs.append(OutputFlag.Debug, f'尝试将各属性扫荡至{target_clear_count}次')
+        outputs2.append(OutputFlag.Debug, f'尝试将各属性扫荡至{target_clear_count}次')
         
         for subtype in 扫荡的属性:
             already_clear_count = talent_quest_area_id2info[subtype].daily_clear_count
@@ -3302,9 +3301,9 @@ async def talent_sweep_async(pcrClient: PcrApi, sweep_mode: str, sweep_cnt: int,
             try:
                 current_stamina = await pcrClient.u_get_current_stamina_async()
             except Exception as e:
-                outputs.append(OutputFlag.Error, f'获取当前体力失败：{e}')
-                return outputs
-            outputs.append(OutputFlag.Debug if has_output_stamina_once else OutputFlag.Info, f'当前体力{current_stamina}')
+                outputs2.append(OutputFlag.Error, f'获取当前体力失败：{e}')
+                return outputs + outputs2
+            outputs2.append(OutputFlag.Debug if has_output_stamina_once else OutputFlag.Info, f'当前体力{current_stamina}')
             has_output_stamina_once = True
             
             if current_stamina < this_turn_stamina_need:
@@ -3312,55 +3311,66 @@ async def talent_sweep_async(pcrClient: PcrApi, sweep_mode: str, sweep_cnt: int,
                     try:
                         recover_stamina_output, current_stamina_new = await recover_stamina_to_target_async(pcrClient, user_allow_stamina_recover_count, this_turn_stamina_need, account_info, present_receive_mode, is_daily_mission_accept_all)
                     except Exception as e:
-                        outputs.append(OutputFlag.Error, f'恢复体力失败：{e}')
-                        return outputs
-                    outputs += recover_stamina_output
+                        outputs2.append(OutputFlag.Error, f'恢复体力失败：{e}')
+                        return outputs + outputs2
+                    outputs2 += recover_stamina_output
                     if current_stamina == current_stamina_new:
                         is_recover_stamina_of_no_use = True
                     current_stamina = current_stamina_new
             if current_stamina < map_utils.TalentPCRMap.talent_stamina_cost:
                 account_info["is_out_of_stamina"] = True
-                outputs.append(OutputFlag.Info, '体力耗尽，不执行后续扫荡')
-                return outputs
+                outputs2.append(OutputFlag.Info, '体力耗尽，不执行后续扫荡')
+                break
             this_turn_clear_count = min(this_turn_clear_count, current_stamina // map_utils.TalentPCRMap.talent_stamina_cost)
             
             try:
                 ticket_stock = await pcrClient.u_get_ticket_stock_async()
             except Exception as e:
-                outputs.append(OutputFlag.Error, f'获取当前扫荡券数量失败：{e}')
-                return outputs
+                outputs2.append(OutputFlag.Error, f'获取当前扫荡券数量失败：{e}')
+                return outputs + outputs2
             if ticket_stock < this_turn_clear_count:
-                outputs.append(OutputFlag.Warn, f'扫荡券数量{ticket_stock}不足')
+                outputs2.append(OutputFlag.Warn, f'扫荡券数量{ticket_stock}不足')
                 this_turn_clear_count = ticket_stock
             
             if already_clear_count + this_turn_clear_count > (1 + talent_quest_area_id2info[subtype].daily_recovery_count) * daily_clear_limit_count:
                 try:
                     jewel = await pcrClient.u_get_total_jewel_async()
                 except Exception as e:
-                    outputs.append(OutputFlag.Error, f'获取当前钻石失败：{e}')
-                    return outputs
+                    outputs2.append(OutputFlag.Error, f'获取当前钻石失败：{e}')
+                    return outputs + outputs2
                 if jewel < recovery_cost:
-                    outputs.append(OutputFlag.Warn, f'当前钻石{jewel}不足以回复挑战次数({recovery_cost})。钻石耗尽不执行后续扫荡')
-                    return outputs    
+                    outputs2.append(OutputFlag.Warn, f'当前钻石{jewel}不足以回复挑战次数({recovery_cost})。钻石耗尽不执行后续扫荡')
+                    return outputs + outputs2
                 try:
                     await pcrClient.talent_quest__recover_challenge_async(subtype.value // 1000000 % 10, jewel)
                 except Exception as e:
-                    outputs.append(OutputFlag.Error, f'[{subtype.name}]属性深域回复挑战次数失败：{e}')
-                    return outputs
+                    outputs2.append(OutputFlag.Error, f'[{subtype.name}]属性深域回复挑战次数失败：{e}')
+                    return outputs + outputs2
                 talent_quest_area_id2info[subtype].daily_recovery_count += 1
             
             try:
                 await pcrClient.talent_quest__quest_skip_async(talent_quest_type2user_cleared_id[subtype.value], this_turn_clear_count, ticket_stock)
             except Exception as e:
-                outputs.append(OutputFlag.Error, f'[{subtype.name}]属性深域扫荡({this_turn_clear_count}次)失败：{e}')
-                return outputs
+                outputs2.append(OutputFlag.Error, f'[{subtype.name}]属性深域扫荡({this_turn_clear_count}次)失败：{e}')
+                return outputs + outputs2
             talent_quest_area_id2info[subtype].daily_clear_count += this_turn_clear_count
-            outputs.append(OutputFlag.Succeed, f'[{subtype.name}]扫荡{this_turn_clear_count}次')
+            outputs2.append(OutputFlag.Succeed, f'[{subtype.name}]扫荡{this_turn_clear_count}次')
+            subtype2clear_count[subtype] += this_turn_clear_count
         
         if account_info.get("is_out_of_stamina", None) == True:
             break
 
+    if outputs2.Result > OutputFlag.Succeed:
+        return outputs + outputs2
+    
+    if any(count > 0 for count in subtype2clear_count.values()):
+        outputs.append(OutputFlag.Succeed, f'本次成功扫荡深域：' + ' '.join([f'{subtype.name}={count}' for subtype, count in subtype2clear_count.items()]))
+    else:
+        outputs.append(OutputFlag.Skip, '本次未扫荡任何深域')
+    if account_info.get("is_out_of_stamina", None) == True:
+        outputs.append(OutputFlag.Info, '体力耗尽，不执行后续扫荡')
     return outputs
+    
 
 async def buy_stamina_active(account_info, buy_stamina_active_daycount):
     try:
@@ -4127,11 +4137,11 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
 
     if config["xinsui_all"]:
         for xinsui_map_id in range(18001008, 18001000, -1):
-            if account_info.get("is_out_of_stamina", None) == False:
+            if account_info.get("is_out_of_stamina", None) != True:
                 progress.append(["xinsui_all", f'{await investigate(account_info, xinsui_map_id, config["xinsui_all"], config["buy_stamina_passive"])}'])
     if config["xingqiubei_all"]:
         for xingqiubei_map_id in range(19001002, 19001000, -1):
-            if account_info.get("is_out_of_stamina", None) == False:
+            if account_info.get("is_out_of_stamina", None) != True:
                 progress.append(["xingqiubei_all", f'{await investigate(account_info, xingqiubei_map_id, config["xingqiubei_all"], config["buy_stamina_passive"])}'])
     
     # allin
