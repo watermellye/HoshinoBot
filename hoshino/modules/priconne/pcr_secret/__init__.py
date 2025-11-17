@@ -1498,7 +1498,8 @@ async def dungeon_sweep(account_info, mode: str, allow_dungeon_sweep_during_sp: 
         31006: "绿龙的骸岭(EX3)",
         31007: "天上的浮城(EX4)",
         31008: "沙瀑的底部(EX5)",
-        31009: "绀碧的王城(EX6)"
+        31009: "绀碧的王城(EX6)",
+        31010: "四彩的靈峰(EX7)",
     }
 
     try:
