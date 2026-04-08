@@ -1393,3 +1393,61 @@ class PcrApi:
             List[int]: 已读剧情ID列表
         """
         return (await self.load__index_async()).get("read_story_ids", [])
+    
+    class seven__top__mission(BaseModel):
+        mission_id: int = Field(..., examples=[20101])
+        mission_status: int = Field(..., examples=[2])
+        clear_num: int = Field(..., examples=[1])
+
+    class seven__top__boss_info(BaseModel):
+        quest_id: int = Field(..., examples=[10201101])
+        appear_num: int = Field(..., examples=[3])
+        attack_num: int = Field(..., examples=[0])
+        enemy_unit: Optional[list[dict]] = None
+        mode: Optional[int] = None
+        enemy_point: Optional[int] = None
+    
+    class seven__top__clear_quest(BaseModel):
+        quest_id: int = Field(..., examples=[10201001])
+        clear_flg: int =Field(..., description="几星通关（[0,3]），其中0星为未通关", examples=[3])
+        daily_clear_count: int = Field(..., examples=[0])
+    
+    class seven__top(BaseModel):
+        login_bonus: Optional[dict] = None
+        missions: list['PcrApi.seven__top__mission']
+        unlocked_sub_contents: Optional[list[int]] = None
+        boss_info: list['PcrApi.seven__top__boss_info']
+        clear_quest_list: list['PcrApi.seven__top__clear_quest']
+
+    async def seven__top_async(self, schedule_id: int) -> seven__top:
+        """
+        七冠活动首页
+        Args:
+            schedule_id (int): see SevenEvent.schedule_id in db_io.py
+        Raises:
+            PcrApiException
+        """
+        return PcrApi.seven__top(**(await self.CallApi("/seven/top", {"schedule_id": schedule_id})))
+    
+    class seven__quest_skip_multiple__skip_list__item(BaseModel):
+        quest_id: int = Field(..., examples=[10201101])
+        skip_count: int = Field(..., examples=[3])
+    
+    async def seven__quest_skip_multiple_async(
+        self,
+        schedule_id: int, # see SevenEvent.schedule_id in db_io.py
+        skip_list: list['PcrApi.seven__quest_skip_multiple__skip_list__item'],
+        exec_type: int, # 1=单个关卡面板扫荡 2=扫荡面板扫荡
+        current_ticket_num: int) -> None:
+        """
+        七冠活动扫荡
+        Raises:
+            PcrApiException
+        """
+        request_data = {
+            "schedule_id": schedule_id,
+            "skip_list": [item.model_dump() for item in skip_list],
+            "exec_type": exec_type,
+            "current_ticket_num": current_ticket_num
+        }
+        _ = await self.CallApi("/seven/quest_skip_multiple", request_data)

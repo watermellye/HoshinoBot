@@ -24,7 +24,7 @@ from ..autopcr_db.typing import *
 gs_apiRoot = 'http://le1-prod-all-gs-gzlj.bilibiligame.net'
 gs_debugging = False
 gs_curpath = dirname(__file__)
-g_nowVersion = "10.7.1"
+g_nowVersion = "11.4.0"
 gs_versionCachePath = join(gs_curpath, 'data/version.txt')
 if exists(gs_versionCachePath):
     with open(gs_versionCachePath, 'r', encoding='utf-8') as fp:

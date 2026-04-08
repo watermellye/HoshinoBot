@@ -217,6 +217,55 @@ class TalentPCRMap(PCRMap): # 深域
 
     talent_stamina_cost = 10  # for static access
 
+
+class SevenEventPCRMap(PCRMap): # 七冠活动
+    @unique
+    class SevenEventPCRMapSubType(IntEnum):
+        前篇N = 000
+        前篇H = 100
+        后篇N = 200
+        后篇H = 300
+
+    def __init__(self, quest_id: int):
+        super().__init__()
+
+        subtype_value = quest_id % 1000 // 100 * 100
+        if subtype_value not in [e.value for e in self.SevenEventPCRMapSubType]:
+            raise ValueError(f'无法识别的七冠活动地图ID: {quest_id}')
+        self.subtype = self.SevenEventPCRMapSubType(subtype_value)
+        
+        self.major = (quest_id % 100 - 1) // 10 + 1
+        self.minor = (quest_id % 100 - 1) % 10 + 1
+        self.event_id = quest_id // 1000
+        self.quest_id = quest_id
+
+    @property
+    def name(self) -> str:
+        return f'{"复刻" if self.is_rerun() else ""}七冠活动{self.event_id}|{self.short_name}'
+    
+    @property
+    def short_name(self) -> str:
+        return f'{self.subtype.name}{self.major}-{self.minor}'
+
+    @property
+    def id(self) -> int:
+        return self.quest_id
+
+    @property
+    def stamina(self) -> int:
+        '''
+        扫荡一次该地图所需的体力
+        '''
+        if self.subtype in [self.SevenEventPCRMapSubType.前篇N, self.SevenEventPCRMapSubType.后篇N]:
+            return 10
+        if self.subtype in [self.SevenEventPCRMapSubType.前篇H, self.SevenEventPCRMapSubType.后篇H]:
+            return 20
+        return 0
+
+    def is_rerun(self) -> bool:
+        return 20000 < self.event_id < 29999
+
+
 def from_id(map_id: Union[int, str]) -> PCRMap:
     '''
     :returns: 由于python没有虚函数，因此实际返回的是PCRMap的某个子类。写成返回PCRMap基类，是为了为了语法提示能工作。
