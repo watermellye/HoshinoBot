@@ -48,7 +48,7 @@ class TalentQuest(BaseModel):
     max_cleared_id = IntegerField(help_text="e.g. 81001070")
 
 class SevenEvent(BaseModel):
-    "七冠活动"
+    "新版活动"
     event_id = IntegerField(primary_key=True)
     schedule_id = IntegerField()
     gacha_id = IntegerField()
@@ -108,7 +108,7 @@ class _DbIo:
 
     def get_current_seven_event(self) -> Optional[SevenEvent]:
         """
-        获取当前的七冠活动。
+        获取当前的新版活动。
         """
         now_str = datetime.now().strftime("%Y%m%d %H:%M")
         return SevenEvent.select().where((SevenEvent.event_start_time <= now_str) & (SevenEvent.event_close_time >= now_str)).first()

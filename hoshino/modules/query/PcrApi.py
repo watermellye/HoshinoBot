@@ -1421,7 +1421,7 @@ class PcrApi:
 
     async def seven__top_async(self, schedule_id: int) -> seven__top:
         """
-        七冠活动首页
+        新版活动首页
         Args:
             schedule_id (int): see SevenEvent.schedule_id in db_io.py
         Raises:
@@ -1440,7 +1440,7 @@ class PcrApi:
         exec_type: int, # 1=单个关卡面板扫荡 2=扫荡面板扫荡
         current_ticket_num: int) -> None:
         """
-        七冠活动扫荡
+        新版活动扫荡
         Raises:
             PcrApiException
         """
@@ -1451,3 +1451,17 @@ class PcrApi:
             "current_ticket_num": current_ticket_num
         }
         _ = await self.CallApi("/seven/quest_skip_multiple", request_data)
+
+    async def seven__gacha_exec_multiple_async(self, schedule_id: int, gacha_id: int, gacha_times: int, current_cost_num: int) -> None:
+        """
+        新版活动交换活动奖励券
+        Raises:
+            PcrApiException
+        """
+        request_data = {
+            "schedule_id": schedule_id,
+            "gacha_id": gacha_id,
+            "gacha_times": gacha_times,
+            "current_cost_num": current_cost_num
+        }
+        _ = await self.CallApi("/seven/gacha_exec_multiple", request_data)

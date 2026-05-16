@@ -218,11 +218,11 @@ class TalentPCRMap(PCRMap): # 深域
     talent_stamina_cost = 10  # for static access
 
 
-class SevenEventPCRMap(PCRMap): # 七冠活动
+class SevenEventPCRMap(PCRMap): # 新版活动
     @unique
     class SevenEventPCRMapSubType(IntEnum):
-        前篇N = 000
-        前篇H = 100
+        N = 000 # 前篇N
+        H = 100 # 前篇H
         后篇N = 200
         后篇H = 300
 
@@ -231,7 +231,7 @@ class SevenEventPCRMap(PCRMap): # 七冠活动
 
         subtype_value = quest_id % 1000 // 100 * 100
         if subtype_value not in [e.value for e in self.SevenEventPCRMapSubType]:
-            raise ValueError(f'无法识别的七冠活动地图ID: {quest_id}')
+            raise ValueError(f'无法识别的新版活动地图ID: {quest_id}')
         self.subtype = self.SevenEventPCRMapSubType(subtype_value)
         
         self.major = (quest_id % 100 - 1) // 10 + 1
@@ -241,7 +241,7 @@ class SevenEventPCRMap(PCRMap): # 七冠活动
 
     @property
     def name(self) -> str:
-        return f'{"复刻" if self.is_rerun() else ""}七冠活动{self.event_id}|{self.short_name}'
+        return f'{"复刻" if self.is_rerun() else ""}活动{self.event_id}|{self.short_name}'
     
     @property
     def short_name(self) -> str:
@@ -256,9 +256,9 @@ class SevenEventPCRMap(PCRMap): # 七冠活动
         '''
         扫荡一次该地图所需的体力
         '''
-        if self.subtype in [self.SevenEventPCRMapSubType.前篇N, self.SevenEventPCRMapSubType.后篇N]:
+        if self.subtype in [self.SevenEventPCRMapSubType.N, self.SevenEventPCRMapSubType.后篇N]:
             return 10
-        if self.subtype in [self.SevenEventPCRMapSubType.前篇H, self.SevenEventPCRMapSubType.后篇H]:
+        if self.subtype in [self.SevenEventPCRMapSubType.H, self.SevenEventPCRMapSubType.后篇H]:
             return 20
         return 0
 

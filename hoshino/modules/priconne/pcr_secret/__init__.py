@@ -2085,7 +2085,32 @@ async def free_gacha_resident(pcrClient: PcrApi) -> Outputs:
         outputs.append(OutputFlag.Info, f'您有 {fg10_exec_cnt} 张十连抽奖券未使用')
         
     return outputs
+
+async def seven_event_gacha_async(pcrClient: PcrApi, seven_event: SevenEvent) -> Outputs:
+    if seven_event is None:
+        return Outputs.FromStr(OutputFlag.Error, "AssertionError: SevenEvent is None.")
     
+    活动奖励券_id = 60000 + seven_event.gacha_id // 100 % 1000 * 10 + 1 # 1020201 -> 62021
+    try:
+        活动奖励券_count = await pcrClient.u_get_item_stock_async(活动奖励券_id)
+    except PcrApiException as e:
+        return Outputs.FromStr(OutputFlag.Error, f'获取活动奖励券{活动奖励券_id}数量失败：{e}')
+    if 活动奖励券_count == 0:
+        return Outputs.FromStr(OutputFlag.Skip, f'活动奖励券{活动奖励券_id}数量为0')
+    
+    outputs = Outputs()
+    current_cost_num = 活动奖励券_count
+    while current_cost_num > 0:
+        gacha_times = min(current_cost_num, 3000)
+        try:
+            _ = await pcrClient.seven__gacha_exec_multiple_async(schedule_id=seven_event.schedule_id, gacha_id=seven_event.gacha_id, gacha_times=gacha_times, current_cost_num=current_cost_num)
+        except PcrApiException as e:
+            outputs.append(OutputFlag.Error, f'活动{seven_event.event_id}交换活动奖励券失败：{e}')
+            return outputs
+        outputs.append(OutputFlag.Succeed, f'活动{seven_event.event_id}交换活动奖励券({活动奖励券_count}张)成功')
+        current_cost_num -= gacha_times
+
+    return outputs
 
 async def event_gacha(account_info, event_id_list=None):
     event_gacha_info_path = Path(__file__).parent / "event_gacha_info.json"
@@ -3131,12 +3156,12 @@ async def seven_event_hard_sweep_async(pcrClient: PcrApi, seven_event: SevenEven
     try:
         seven_top_info = await pcrClient.seven__top_async(schedule_id)
     except Exception as e:
-        return Outputs.FromStr(OutputFlag.Error, f'获取七冠活动(schedule_id={schedule_id})信息失败：{e}')
+        return Outputs.FromStr(OutputFlag.Error, f'获取活动(schedule_id={schedule_id})信息失败：{e}')
 
     outputs = Outputs()
 
-    can_clear_hard_quests = [quest for quest in seven_top_info.clear_quest_list if quest.clear_flg == 3 and map_utils.SevenEventPCRMap(quest.quest_id).subtype in (map_utils.SevenEventPCRMap.SevenEventPCRMapSubType.前篇H, map_utils.SevenEventPCRMap.SevenEventPCRMapSubType.后篇H)]
-    outputs.append(OutputFlag.Info, f'七冠活动{event_id}有[{len(can_clear_hard_quests)}]个关卡可扫荡')
+    can_clear_hard_quests = [quest for quest in seven_top_info.clear_quest_list if quest.clear_flg == 3 and map_utils.SevenEventPCRMap(quest.quest_id).subtype in (map_utils.SevenEventPCRMap.SevenEventPCRMapSubType.H, map_utils.SevenEventPCRMap.SevenEventPCRMapSubType.后篇H)]
+    outputs.append(OutputFlag.Info, f'活动{event_id}有[{len(can_clear_hard_quests)}]个关卡可扫荡')
     
     already_cleared_hard_quests = [quest for quest in can_clear_hard_quests if quest.daily_clear_count == 3]
     if len(already_cleared_hard_quests) > 0:
@@ -4180,18 +4205,17 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     seven_event: Optional[SevenEvent] = gs_db.get_current_seven_event()
     if seven_event is not None:
         if config["event_hard_135"] != "disabled" or config["event_hard_24"] != "disabled":
-            progress.append(["刷七冠活动H图", f'{await seven_event_hard_sweep_async(pcrClient, seven_event, user_allow_stamina_recover_count=max(config["buy_stamina_passive"], config["buy_stamina_active"]), account_info=account_info, present_receive_mode=config["present_receive"], is_daily_mission_accept_all=config["mission_accept_all"])}'])
-    else:
-        if config["event_hard_135"] != "disabled":
-            ret = await event_hard_sweep(account_info, config["event_hard_135"], config["buy_stamina_passive"], [1, 3, 5])
-            if '当前无开放的活动' in ret:
-                config = close_event_config(qqid)
-            progress.append(["event_hard_135", f'{ret}'])
-        if config["event_hard_24"] != "disabled":
-            ret = await event_hard_sweep(account_info, config["event_hard_24"], config["buy_stamina_passive"], [2, 4])
-            if '当前无开放的活动' in ret:
-                config = close_event_config(qqid)
-            progress.append(["event_hard_24", f'{ret}'])
+            progress.append(["刷活动H图", f'{await seven_event_hard_sweep_async(pcrClient, seven_event, user_allow_stamina_recover_count=max(config["buy_stamina_passive"], config["buy_stamina_active"]), account_info=account_info, present_receive_mode=config["present_receive"], is_daily_mission_accept_all=config["mission_accept_all"])}'])
+    if config["event_hard_135"] != "disabled":
+        ret = await event_hard_sweep(account_info, config["event_hard_135"], config["buy_stamina_passive"], [1, 3, 5])
+        if '当前无开放的活动' in ret:
+            config = close_event_config(qqid)
+        progress.append(["event_hard_135", f'{ret}'])
+    if config["event_hard_24"] != "disabled":
+        ret = await event_hard_sweep(account_info, config["event_hard_24"], config["buy_stamina_passive"], [2, 4])
+        if '当前无开放的活动' in ret:
+            config = close_event_config(qqid)
+        progress.append(["event_hard_24", f'{ret}'])
 
     if config["talent_sweep_config"] != "disabled" and config["talent_sweep_cnt"] > 0:
         talent_outputs = await talent_sweep_async(
@@ -4242,21 +4266,20 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
             if seven_event is not None:
                 if config["event_normal_5"] != "disabled":
                     # await seven_event_normal_sweep_async(pcrClient, seven_event, config, progress)
-                    progress.append(["event_normal_5", f'Info. 还没写'])
+                    progress.append(["刷活动N1-5", f'Info. 还没写'])
                 if config["event_normal_10"] != "disabled":
                     # await seven_event_normal_sweep_async(pcrClient, seven_event, config, progress)
-                    progress.append(["event_normal_10", f'Info. 还没写'])
-            else:
-                if config["event_normal_5"] != "disabled":
-                    ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
-                    if '当前无开放的活动' in ret:
-                        config = close_event_config(qqid)
-                    progress.append(["event_normal_5", f'{ret}'])
-                if config["event_normal_10"] != "disabled":
-                    ret = await event_normal_sweep(account_info, config["event_normal_10"], config["buy_stamina_passive"], 10)
-                    if '当前无开放的活动' in ret:
-                        config = close_event_config(qqid)
-                    progress.append(["event_normal_10", f'{ret}'])
+                    progress.append(["刷活动N1-10", f'Info. 还没写'])
+            if config["event_normal_5"] != "disabled":
+                ret = await event_normal_sweep(account_info, config["event_normal_5"], config["buy_stamina_passive"], 5)
+                if '当前无开放的活动' in ret:
+                    config = close_event_config(qqid)
+                progress.append(["event_normal_5", f'{ret}'])
+            if config["event_normal_10"] != "disabled":
+                ret = await event_normal_sweep(account_info, config["event_normal_10"], config["buy_stamina_passive"], 10)
+                if '当前无开放的活动' in ret:
+                    config = close_event_config(qqid)
+                progress.append(["event_normal_10", f'{ret}'])
             if config["auto_sweep_normal"]:
                 progress.append(["auto_sweep_normal", f'{await sweep_normal_smart(account_info)}'])
                 
@@ -4285,29 +4308,29 @@ async def __do_daily(qqid: str, nam=None, bot=None, ev=None):
     # allin
     
     if seven_event is not None:
-        if config["event_vh_boss_sweep"]:
-            progress.append(["event_vh_boss_sweep", "Skip. 当前为七冠活动，无需扫荡"])
-        if config["event_hard_boss_sweep"]:
-            progress.append(["event_hard_boss_sweep", "Skip. 当前为七冠活动，无需扫荡"])
+        # if config["event_vh_boss_sweep"]:
+        #     progress.append(["event_vh_boss_sweep", "Skip. 当前为活动，无需扫荡"])
+        # if config["event_hard_boss_sweep"]:
+        #     progress.append(["event_hard_boss_sweep", "Skip. 当前为活动，无需扫荡"])
         if config["event_mission_accept"]:
-            progress.append(["event_mission_accept", f'Info. 还没写'])
+            progress.append(["领取活动任务", f'Info. 还没写'])
         if config["event_gacha"]:
-            progress.append(["event_gacha", f'Info. 还没写'])
-    else:
-        if config["event_vh_boss_sweep"]:
-            ret = await event_vh_boss_sweep(account_info)
-            if '当前无开放的活动' in ret:
-                config = close_event_config(qqid)
-            progress.append(["event_vh_boss_sweep", f'{ret}'])
-        if config["event_hard_boss_sweep"]:
-            ret = await event_hard_boss_sweep(account_info, config["event_hard_boss_sweep"])
-            if '当前无开放的活动' in ret:
-                config = close_event_config(qqid)
-            progress.append(["event_hard_boss_sweep", f'{ret}'])
-        if config["event_mission_accept"]:
-            progress.append(["event_mission_accept", f'{await event_mission_accept(account_info)}'])
-        if config["event_gacha"]:
-            progress.append(["event_gacha", f'{await event_gacha(account_info)}'])
+            progress.append(["交换活动讨伐证", f'{await seven_event_gacha_async(pcrClient, seven_event)}'])
+
+    if config["event_vh_boss_sweep"]:
+        ret = await event_vh_boss_sweep(account_info)
+        if '当前无开放的活动' in ret:
+            config = close_event_config(qqid)
+        progress.append(["event_vh_boss_sweep", f'{ret}'])
+    if config["event_hard_boss_sweep"]:
+        ret = await event_hard_boss_sweep(account_info, config["event_hard_boss_sweep"])
+        if '当前无开放的活动' in ret:
+            config = close_event_config(qqid)
+        progress.append(["event_hard_boss_sweep", f'{ret}'])
+    if config["event_mission_accept"]:
+        progress.append(["event_mission_accept", f'{await event_mission_accept(account_info)}'])
+    if config["event_gacha"]:
+        progress.append(["event_gacha", f'{await event_gacha(account_info)}'])
     if config["buy_flash_shop"]:
         progress.append(["buy_flash_shop", f'{await buy_flash_shop(account_info, buy_exp_frag=(config["buy_exp_count"] > 0), equip_cnt_threshold=config["dungeon_flash_shop_limit"])}'])
     if is_bot(qqid):
@@ -5371,10 +5394,14 @@ async def test_on_startup():
     await pcrClient.Login(always_call_login_and_check=True)
 
     config = copy.deepcopy(dic[qqid]["daily_config"])    
-    print(await seven_event_hard_sweep_async(
-        pcrClient,
-        seven_event=gs_db.get_current_seven_event(),
-        user_allow_stamina_recover_count=0,
-        account_info=account_info,
-        present_receive_mode=config["present_receive"],
-        is_daily_mission_accept_all=config["mission_accept_all"]))
+    # print(await seven_event_hard_sweep_async(
+    #     pcrClient,
+    #     seven_event=gs_db.get_current_seven_event(),
+    #     user_allow_stamina_recover_count=0,
+    #     account_info=account_info,
+    #     present_receive_mode=config["present_receive"],
+    #     is_daily_mission_accept_all=config["mission_accept_all"]))
+    
+    seven_event: Optional[SevenEvent] = gs_db.get_current_seven_event()
+    if seven_event is not None:
+        print(await seven_event_gacha_async(pcrClient, seven_event))
